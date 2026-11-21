@@ -80,7 +80,9 @@ add_executable(qllama MACOSX_BUNDLE
     ui/modelmanagedialog.ui
     resources.qrc
     assets/qllama.icns
-    ${LLAMA_SRCS})
+    ${LLAMA_SRCS}
+    README.md
+    README.en.md)
 set_target_properties(qllama PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "qllama"
     MACOSX_BUNDLE_GUI_IDENTIFIER "local.qllama"

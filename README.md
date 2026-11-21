@@ -1,5 +1,7 @@
 # qllama · Qt + llama.cpp 本地大模型对话客户端
 
+[English](README.en.md) | 中文
+
 基于 **Qt 6 Widgets** 的本地大模型聊天客户端（macOS / Apple Silicon），直接调用
 **llama.cpp 0.9.0** 的 C API（`llama.h`）与 common 聊天模板 API（`common_chat_templates`），
 全程 Metal 加速，无需任何云服务，流式输出。
@@ -12,7 +14,7 @@
 - **多模态**：加载 mmproj 投影模型后支持图片问答（最多 4 张）
 - **模型管理**：从 Hugging Face 拉取最新模型列表、搜索、下载 GGUF 并一键设为当前模型
   （官方站不可达时自动切 hf-mirror.com 镜像，可自定义保存目录，带进度条）
-- **磨砂玻璃主题**：macOS 原生背景模糊 + 玻璃卡片 + 渐变头像/图标（可在配置中关闭）
+- **玻璃质感主题**：浅色渐变底 + 玻璃卡片 + 渐变头像/图标
 - **系统监控**：状态栏常驻 CPU / 内存 / GPU 占用率（彩色指示，2 秒刷新）
 - **配置文件日志**：所有应用与 llama.cpp 日志写入 `~/Library/Logs/qllama/qllama.log`
   （自动轮转），配置页一键打开
@@ -21,16 +23,16 @@
 ## 架构
 
 ```
-┌─────────────────────────── UI 线程 ───────────────────────────┐
-│ MainWindow（聊天界面、系统监控、模型管理）                       │
-│   │ 信号（QueuedConnection，跨线程）                            │
-│   ▼                                                            │
-│ ChatWorker（工作线程，QObject + QThread）                       │
-│   └── LlamaChat（纯 C++ 封装，无 Qt 依赖）                      │
-│         ├── 聊天模板渲染  common_chat_templates_apply()         │
-│         ├── 分词/解码      llama_tokenize / llama_decode        │
-│         └── 采样          llama_sampler_chain_*                │
-└───────────────────────────────────────────────────────────────┘
+┌─────────────────────────── UI 线程 ───────────────────────────
+│ MainWindow（聊天界面、系统监控、模型管理）                         
+│   │ 信号（QueuedConnection，跨线程）                            
+│   ▼                                                          
+│ ChatWorker（工作线程，QObject + QThread）                       
+│   └── LlamaChat（纯 C++ 封装，无 Qt 依赖）                       
+│         ├── 聊天模板渲染  common_chat_templates_apply()         
+│         ├── 分词/解码      llama_tokenize / llama_decode        
+│         └── 采样          llama_sampler_chain_*                
+└───────────────────────────────────────────────────────────────
 ```
 
 要点：
@@ -58,7 +60,7 @@
 
 | 依赖 | 版本 | 说明 |
 |---|---|---|
-| macOS | Apple Silicon | Metal 加速、磨砂玻璃依赖（当前仅支持 macOS） |
+| macOS | Apple Silicon | Metal 加速依赖（当前仅支持 macOS） |
 | Qt 6（Widgets / Network） | ≥ 6.5（开发用 6.12） | Homebrew `qt` |
 | llama.cpp | 0.9.0（源码 + 已构建动态库） | 需先用 CMake 构建出 `build/bin/*.dylib` |
 | CMake / Ninja | ≥ 3.21 | |
@@ -82,10 +84,9 @@ cmake --build build
 - `build/qllama.app` —— GUI 客户端（`open build/qllama.app`）
 - `build/qllama_smoke` —— 无 GUI 冒烟测试，先验证 llama.cpp 链路再开 GUI
 
-## 界面主题（磨砂玻璃）
+## 界面主题（玻璃质感）
 
-- **磨砂玻璃背景**：macOS 原生 `NSVisualEffectView`（`src/MacVibrancy.mm`）对桌面背景
-  实时模糊，控件以 rgba 半透明白叠加其上；可在配置中关闭（关闭时用浅色渐变底）
+- **背景**：浅色渐变底（`assets/theme.qss`），玻璃卡片以 rgba 半透明白叠加其上
 - **全局样式**：`assets/theme.qss`（玻璃卡片、渐变主按钮、圆角输入框、分组框、
   标签页、滚动条、复选框等），经 `resources.qrc` 编译进二进制
 - **图标与头像**：`assets/icons/`（Feather 图标，MIT 协议）；聊天消息使用圆形渐变
@@ -103,7 +104,6 @@ cmake --build build
 | ui/configdialog.ui | `Ui::ConfigDialog` | src/ConfigDialog.h/.cpp |
 | ui/modelmanagedialog.ui | `Ui::ModelManageDialog` | src/ModelManageDialog.h/.cpp |
 
-修改 .ui 中控件的 objectName 时需同步更新源码中的 `ui.xxx` 引用。
 
 ## 使用
 
@@ -177,4 +177,4 @@ UI 中「上下文」上限据此设为 16384（可在 `ui/configdialog.ui` 中�
 - Markdown 渲染为自研轻量子集（表格/任务列表已支持，图片语法、代码高亮未做）；
 - 部署分发时需处理 `@rpath` 依赖（libllama、libggml-*、libllama-common、openssl），
   可用 `install_name_tool` 或把 dylib 拷贝进 app bundle 并改写 rpath；
-- 仅支持 macOS（Metal 与磨砂玻璃依赖），跨平台移植需处理后端与窗口特效。
+- 仅支持 macOS（Metal 加速依赖），跨平台移植需处理后端。
