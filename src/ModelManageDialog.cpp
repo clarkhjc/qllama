@@ -1,5 +1,4 @@
 #include "ModelManageDialog.h"
-#include "MacVibrancy.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -17,7 +16,6 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPushButton>
-#include <QShowEvent>
 #include <QTableWidgetItem>
 #include <QTimer>
 #include <QUrlQuery>
@@ -60,11 +58,6 @@ static QTableWidgetItem * numericItem(long value) {
 
 ModelManageDialog::ModelManageDialog(const AppConfig & config, QWidget * parent) : QDialog(parent) {
     ui.setupUi(this); // 界面布局见 ui/modelmanagedialog.ui（Qt Designer 编辑）
-    macSetupVibrancy(this, config.vibrancy);
-    if (!config.vibrancy) {
-        setStyleSheet("QDialog { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-                      "stop:0 #f2f4fa, stop:1 #e4e8f4); }");
-    }
 
     // 表格列宽策略
     ui.table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
@@ -125,15 +118,6 @@ ModelManageDialog::ModelManageDialog(const AppConfig & config, QWidget * parent)
 
 QString ModelManageDialog::apiHost(bool mirror) const {
     return mirror ? "https://hf-mirror.com" : "https://huggingface.co";
-}
-
-void ModelManageDialog::showEvent(QShowEvent * event) {
-    QDialog::showEvent(event);
-    static bool vibrancyDone = false;
-    if (!vibrancyDone) {
-        vibrancyDone = true;
-        macEnableVibrancy(this);
-    }
 }
 
 // 下载期间禁止关闭窗口（否则会中止下载留下半截文件）

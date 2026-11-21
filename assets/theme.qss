@@ -1,6 +1,6 @@
 /* ============================================================
-   qllama 磨砂玻璃主题（配合 macOS NSVisualEffectView 背景模糊）
-   全局半透明质感：控件用 rgba 背景叠加在磨砂底上
+   qllama 玻璃质感主题
+   浅色渐变底 + 半透明白玻璃卡片、渐变主按钮、圆角控件
    ============================================================ */
 
 QWidget {
@@ -8,9 +8,10 @@ QWidget {
     color: #33334a;
 }
 
-/* —— 窗口与容器：保持透明，露出磨砂背景 —— */
+/* —— 窗口与容器：浅色渐变底，玻璃卡片叠于其上 —— */
 QMainWindow, QDialog {
-    background: transparent;
+    background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                stop: 0 #f2f4fa, stop: 1 #e4e8f4);
 }
 
 #centralwidget {

@@ -22,7 +22,6 @@ signals:
     void modelDownloaded(const QString & localPath);
 
 protected:
-    void showEvent(QShowEvent * event) override;
     void closeEvent(QCloseEvent * event) override;
 
 private slots:

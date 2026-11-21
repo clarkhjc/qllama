@@ -23,7 +23,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent * event) override;
-    void showEvent(QShowEvent * event) override;
+    void showEvent(QShowEvent * event) override; // 仅用于 QLLAMA_DUMP_GEOMETRY 调试
     bool eventFilter(QObject * watched, QEvent * event) override;
 
 signals:

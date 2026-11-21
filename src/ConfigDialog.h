@@ -10,7 +10,6 @@
 // 应用完整配置：UI 层配置 + llama.cpp 参数
 struct AppConfig {
     QString     systemPrompt; // 系统提示词（空 = 不注入）
-    bool        vibrancy = false; // macOS 原生磨砂玻璃背景（重启生效）
     ChatOptions chat;         // 采样 / 性能 / 多模态参数
 };
 
@@ -21,9 +20,6 @@ class ConfigDialog : public QDialog {
 public:
     explicit ConfigDialog(const AppConfig & config, QWidget * parent = nullptr);
     AppConfig config() const;
-
-protected:
-    void showEvent(QShowEvent * event) override;
 
 private slots:
     void browseMmproj();

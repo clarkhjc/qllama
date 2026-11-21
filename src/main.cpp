@@ -12,7 +12,7 @@ int main(int argc, char * argv[]) {
 
     setupFileLogging(); // 日志文件：~/Library/Logs/qllama/qllama.log
 
-    // 全局磨砂玻璃主题（assets/theme.qss）
+    // 全局玻璃质感主题（assets/theme.qss）
     QFile theme(":/theme.qss");
     if (theme.open(QIODevice::ReadOnly)) {
         app.setStyleSheet(QString::fromUtf8(theme.readAll()));

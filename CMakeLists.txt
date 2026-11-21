@@ -71,8 +71,6 @@ add_executable(qllama MACOSX_BUNDLE
     src/Logging.h
     src/Markdown.cpp
     src/Markdown.h
-    src/MacVibrancy.h
-    src/MacVibrancy.mm
     src/ModelManageDialog.cpp
     src/ModelManageDialog.h
     src/SysMonitor.cpp

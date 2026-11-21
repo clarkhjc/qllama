@@ -1,6 +1,5 @@
 #include "ConfigDialog.h"
 #include "Logging.h"
-#include "MacVibrancy.h"
 
 #include <QCheckBox>
 #include <QDesktopServices>
@@ -11,18 +10,11 @@
 #include <QIcon>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QShowEvent>
 #include <QSpinBox>
 #include <QUrl>
 
 ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog(parent) {
     ui.setupUi(this); // 界面布局见 ui/configdialog.ui（Qt Designer 编辑）
-    macSetupVibrancy(this, config.vibrancy); // 磨砂玻璃：半透明属性必须在显示前设置
-    if (!config.vibrancy) {
-        // 关闭磨砂时窗口不透明，铺浅色渐变底，玻璃卡片叠于其上
-        setStyleSheet("QDialog { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-                      "stop:0 #f2f4fa, stop:1 #e4e8f4); }");
-    }
 
     // 输入框一键清除
     ui.mmprojEdit->setClearButtonEnabled(true);
@@ -48,7 +40,6 @@ ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog
         ui.seedSpin->setValue((int) config.chat.seed);
     }
     ui.thinkCheck->setChecked(config.chat.enable_thinking);
-    ui.vibrancyCheck->setChecked(config.vibrancy);
 
     // —— 连接 ——
     connect(ui.browseMmprojBtn, &QPushButton::clicked, this, &ConfigDialog::browseMmproj);
@@ -77,15 +68,6 @@ ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog
     });
 }
 
-void ConfigDialog::showEvent(QShowEvent * event) {
-    QDialog::showEvent(event);
-    static bool vibrancyDone = false;
-    if (!vibrancyDone) {
-        vibrancyDone = true;
-        macEnableVibrancy(this); // 磨砂层：窗口显示后插入
-    }
-}
-
 AppConfig ConfigDialog::config() const {
     AppConfig c;
     c.systemPrompt = ui.systemPromptEdit->text().trimmed();
@@ -103,7 +85,6 @@ AppConfig ConfigDialog::config() const {
     o.seed            = ui.seedRandomCheck->isChecked() ? LLAMA_DEFAULT_SEED : (uint32_t) ui.seedSpin->value();
     o.enable_thinking = ui.thinkCheck->isChecked();
     o.mmprojPath      = ui.mmprojEdit->text().trimmed().toStdString();
-    c.vibrancy        = ui.vibrancyCheck->isChecked();
     return c;
 }
 

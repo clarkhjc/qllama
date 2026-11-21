@@ -1,5 +1,4 @@
 #include "MainWindow.h"
-#include "MacVibrancy.h"
 #include "Markdown.h"
 #include "ModelManageDialog.h"
 
@@ -22,7 +21,6 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
-#include <QSettings>
 #include <QShowEvent>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -128,16 +126,7 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     ui.setupUi(this); // 界面布局见 ui/mainwindow.ui（Qt Designer 编辑）
     setWindowIcon(QIcon(":/assets/icons/appicon.png"));
 
-    // 磨砂玻璃开关（默认关闭；全量配置中可开启，重启生效）
-    m_config.vibrancy = QSettings().value("ui/vibrancy", false).toBool();
-    macSetupVibrancy(this, m_config.vibrancy); // 半透明属性必须在显示前设置
-    if (!m_config.vibrancy) {
-        // 关闭磨砂时窗口不透明，铺浅色渐变底，玻璃卡片叠于其上
-        setStyleSheet("QMainWindow { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-                      "stop:0 #f2f4fa, stop:1 #e4e8f4); }");
-    }
-
-    // 滚动区域透明，露出磨砂玻璃背景
+    // 滚动区域透明，露出窗口背景
     ui.chatView->viewport()->setAutoFillBackground(false);
     ui.input->viewport()->setAutoFillBackground(false);
 
@@ -338,14 +327,8 @@ void MainWindow::browseModel() {
 void MainWindow::onConfig() {
     ConfigDialog dlg(m_config, this);
     if (dlg.exec() == QDialog::Accepted) {
-        const bool vibrancyBefore = m_config.vibrancy;
         m_config = dlg.config();
-        QSettings().setValue("ui/vibrancy", m_config.vibrancy);
-        if (m_config.vibrancy != vibrancyBefore) {
-            statusBar()->showMessage("磨砂玻璃开关已保存，重启程序后生效", 5000);
-        } else {
-            statusBar()->showMessage("配置已更新", 3000);
-        }
+        statusBar()->showMessage("配置已更新", 3000);
     }
 }
 
@@ -748,10 +731,9 @@ void MainWindow::finishAssistantHeader() {
 // —— 事件 ——
 void MainWindow::showEvent(QShowEvent * event) {
     QMainWindow::showEvent(event);
-    static bool vibrancyDone = false;
-    if (!vibrancyDone) {
-        vibrancyDone = true;
-        macEnableVibrancy(this); // 磨砂层：窗口显示后插入
+    static bool geometryDumped = false;
+    if (!geometryDumped) {
+        geometryDumped = true;
         // 调试：QLLAMA_DUMP_GEOMETRY=1 时打印关键控件几何信息
         if (qEnvironmentVariableIsSet("QLLAMA_DUMP_GEOMETRY")) {
             qInfo().noquote() << "GEOM input:" << ui.input->geometry()
