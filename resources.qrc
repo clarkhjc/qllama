@@ -1,0 +1,29 @@
+<RCC>
+    <qresource prefix="/">
+        <file>assets/theme.qss</file>
+        <file>assets/icons/send.svg</file>
+        <file>assets/icons/send-white.svg</file>
+        <file>assets/icons/square.svg</file>
+        <file>assets/icons/square-white.svg</file>
+        <file>assets/icons/image.svg</file>
+        <file>assets/icons/sliders.svg</file>
+        <file>assets/icons/download.svg</file>
+        <file>assets/icons/x-circle.svg</file>
+        <file>assets/icons/trash-2.svg</file>
+        <file>assets/icons/folder.svg</file>
+        <file>assets/icons/play-circle.svg</file>
+        <file>assets/icons/play-circle-white.svg</file>
+        <file>assets/icons/user.svg</file>
+        <file>assets/icons/user-white.svg</file>
+        <file>assets/icons/zap.svg</file>
+        <file>assets/icons/zap-white.svg</file>
+        <file>assets/icons/check.svg</file>
+        <file>assets/icons/check-white.svg</file>
+        <file>assets/icons/x.svg</file>
+        <file>assets/icons/message-circle.svg</file>
+        <file>assets/icons/message-circle-white.svg</file>
+        <file>assets/icons/appicon.png</file>
+        <file>assets/icons/star.svg</file>
+        <file>assets/icons/settings.svg</file>
+    </qresource>
+</RCC>
