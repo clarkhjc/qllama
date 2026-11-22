@@ -15,7 +15,9 @@ the **llama.cpp 0.9.0** C API (`llama.h`) and the common chat-template API
 - **Model management**: fetch the latest models from Hugging Face, search, download GGUF files and
   set one as the current model in a single click (auto-falls back to the hf-mirror.com mirror when
   the official site is unreachable; customizable save directory, with progress bar)
-- **Glassmorphism theme**: light gradient background + glass cards + gradient avatars/icons
+- **Three themes**: light / dark / pink, switchable in one click from the config dialog
+  (live preview, persisted), with all widget styles living in QSS
+- **Glassmorphism**: gradient background + glass cards + gradient avatars/icons
 - **System monitor**: persistent CPU / memory / GPU usage in the status bar (color-coded,
   refreshed every 2 seconds)
 - **Config & file logging**: all app and llama.cpp logs go to `~/Library/Logs/qllama/qllama.log`
@@ -95,14 +97,21 @@ Artifacts:
 - `build/qllama.app` — GUI client (`open build/qllama.app`)
 - `build/qllama_smoke` — headless smoke test; verify the llama.cpp pipeline before opening the GUI
 
-## UI theme (glassmorphism)
+## UI themes (light / dark / pink)
 
-- **Background**: light gradient (`assets/theme.qss`), with glass cards layered on top as
-  semi-transparent white rgba panels
-- **Global styles**: `assets/theme.qss` (glass cards, gradient primary buttons, rounded inputs,
-  group boxes, tabs, scrollbars, checkboxes, …), compiled into the binary via `resources.qrc`
-- **Icons & avatars**: `assets/icons/` (Feather icons, MIT license); chat messages use circular
-  gradient avatars (you = blue-indigo gradient / person, assistant = violet gradient / lightning)
+- **Switching**: three buttons under 「全量配置 → 性能与界面 → 主题」 in the config dialog;
+  clicking previews the theme immediately, 「确定」(OK) saves it to QSettings (`ui/theme`) for
+  the next launch, 「取消」(Cancel) restores the previous theme
+- **Style files**: `assets/themes/light.qss`, `dark.qss`, `pink.qss` — every widget style
+  (window gradient, glass cards, buttons, inputs, tabs, tables, scrollbars, progress bar,
+  status dot, theme buttons, …) is defined there, compiled into the binary via `resources.qrc`
+- **Palette**: what QSS cannot reach (chat HTML, Markdown code blocks/tables/quotes, avatar
+  gradients, monochrome SVG icon tinting, system-monitor colors) comes from the `ThemePalette`
+  in `src/Theme.h/.cpp`, kept in sync with the matching QSS
+- **Icons**: `assets/icons/` (Feather icons, MIT license); in the dark theme non-white icons are
+  tinted by `Theme::icon()`, while the `-white.svg` variants stay as-is for gradient buttons/avatars
+- **Debug**: the `QLLAMA_THEME=dark` environment variable forces the startup theme
+  (useful for screenshots/regression)
 
 ## Qt Creator / Designer development
 
@@ -137,6 +146,7 @@ in the corresponding classes under `src/`:
 
 | Parameter | Default | Description |
 |---|---|---|
+| 主题 Theme | light | light / dark / pink; clicking previews immediately, 「确定」(OK) persists it |
 | 投影模型 Projector model | empty | multimodal projector mmproj*.gguf; once loaded, 「添加图片」(Add Image) lets you send images (auto-detected when selecting a model) |
 | Top-K | 40 | candidate token cutoff; 0 = disabled |
 | Top-P | 0.95 | nucleus sampling cumulative probability threshold |

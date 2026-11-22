@@ -1,6 +1,6 @@
 /* ============================================================
-   qllama 玻璃质感主题
-   浅色渐变底 + 半透明白玻璃卡片、渐变主按钮、圆角控件
+   qllama 主题 · light（浅色）
+   控件外观全部集中在本文件；聊天 HTML / 头像 / 图标着色见 src/Theme.cpp
    ============================================================ */
 
 QWidget {
@@ -30,6 +30,30 @@ QFrame#modelBar {
     color: #5a5a70;
     font-size: 12px;
     padding-right: 8px;
+}
+
+/* 配置页提示文字 */
+#basicHint {
+    color: #8a8a9e;
+    font-size: 12px;
+}
+
+/* 模型状态指示灯：state = idle / loading / ok / error */
+QLabel#statusDot {
+    font-size: 13px;
+    color: #9a9aa8;
+}
+
+QLabel#statusDot[state="loading"] {
+    color: #f5a623;
+}
+
+QLabel#statusDot[state="ok"] {
+    color: #2ecc71;
+}
+
+QLabel#statusDot[state="error"] {
+    color: #e5484d;
 }
 
 QTextBrowser {
@@ -80,6 +104,56 @@ QLineEdit, QSpinBox, QDoubleSpinBox {
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border: 1px solid #7c9bff;
     background: rgba(255, 255, 255, 0.85);
+}
+
+/* —— 数字框上下箭头：加宽按钮区、放大箭头（替换 macOS 原生小箭头） —— */
+QSpinBox, QDoubleSpinBox {
+    min-height: 26px;
+    padding-right: 30px;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 24px;
+    height: 12px;
+    margin: 1px 3px 0 0;
+    border: none;
+    border-top-right-radius: 7px;
+    background: rgba(255, 255, 255, 0.36);
+}
+
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 24px;
+    height: 12px;
+    margin: 0 3px 1px 0;
+    border: none;
+    border-bottom-right-radius: 7px;
+    background: rgba(255, 255, 255, 0.36);
+}
+
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+    background: rgba(91, 124, 255, 0.18);
+}
+
+QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
+QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
+    background: rgba(91, 124, 255, 0.30);
+}
+
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+    width: 11px;
+    height: 11px;
+    image: url(:/assets/icons/chevron-up.svg);
+}
+
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+    width: 11px;
+    height: 11px;
+    image: url(:/assets/icons/chevron-down.svg);
 }
 
 /* —— 按钮 —— */
@@ -147,6 +221,24 @@ QPushButton:disabled {
     color: rgba(255, 255, 255, 0.7);
 }
 
+/* —— 主题切换按钮（配置页·性能与界面） —— */
+#themeLightBtn, #themeDarkBtn, #themePinkBtn {
+    padding: 6px 16px;
+}
+
+#themeLightBtn:checked, #themeDarkBtn:checked, #themePinkBtn:checked {
+    border: none;
+    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
+                                stop: 0 #5b7cff, stop: 1 #8a5bff);
+    color: white;
+    font-weight: 600;
+}
+
+#themeLightBtn:hover:!checked, #themeDarkBtn:hover:!checked, #themePinkBtn:hover:!checked {
+    border: 1px solid #7c9bff;
+    color: #3a6df0;
+}
+
 /* —— 状态栏 —— */
 QStatusBar {
     background: transparent;
@@ -202,6 +294,16 @@ QTabBar::tab:hover:!selected {
     background: rgba(255, 255, 255, 0.4);
 }
 
+/* —— 配置页滚动区（内容超高时滚动，底部按钮保持可见） —— */
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+
 /* —— 复选框 —— */
 QCheckBox {
     spacing: 8px;
@@ -229,6 +331,22 @@ QCheckBox::indicator:checked {
 QCheckBox::indicator:disabled {
     background: rgba(255, 255, 255, 0.3);
     border: 1px solid rgba(120, 120, 150, 0.3);
+}
+
+/* —— 进度条（模型下载） —— */
+QProgressBar {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    height: 16px;
+    text-align: center;
+    color: #5a5a70;
+}
+
+QProgressBar::chunk {
+    border-radius: 7px;
+    background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0,
+                                stop: 0 #5b7cff, stop: 1 #8a5bff);
 }
 
 /* —— 滚动条 —— */
@@ -273,7 +391,7 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
 }
 
 /* —— 模型管理表格 —— */
-QTableWidget {
+QTableWidget, QTableView {
     background: rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.95);
     border-radius: 10px;
@@ -282,17 +400,17 @@ QTableWidget {
     alternate-background-color: rgba(91, 124, 255, 0.04);
 }
 
-QTableWidget::item {
+QTableWidget::item, QTableView::item {
     padding: 5px 8px;
 }
 
-QTableWidget::item:selected {
+QTableWidget::item:selected, QTableView::item:selected {
     background: rgba(91, 124, 255, 0.22);
     color: #2b2b38;
 }
 
 QHeaderView::section {
-    background: rgba(255, 255, 255, 0.55);
+    background: #f3f5fb;
     color: #5a5a70;
     padding: 7px 8px;
     border: none;
@@ -302,11 +420,20 @@ QHeaderView::section {
 
 /* —— 提示气泡 —— */
 QToolTip {
-    background: rgba(40, 42, 60, 0.92);
+    background: #2a2c3e;
     color: #f2f2f7;
     border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 7px;
     padding: 5px 9px;
+}
+
+/* 模型列表悬停介绍（自绘不透明提示窗） */
+#modelHoverTip {
+    background: #2a2c3e;
+    color: #f2f2f7;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    padding: 9px 12px;
+    font-size: 12px;
 }
 
 /* —— 消息框（非半透明窗口，用实底） —— */

@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "Markdown.h"
 #include "ModelManageDialog.h"
+#include "Theme.h"
 
 #include <QBuffer>
 #include <QCheckBox>
@@ -21,9 +22,11 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
+#include <QSettings>
 #include <QShowEvent>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTextBrowser>
 #include <QTextCursor>
 #include <QTextEdit>
@@ -47,76 +50,101 @@ static QString imageDataUri(const QString & path, int maxWidth = 320) {
     return "data:image/png;base64," + QString::fromLatin1(png.toBase64());
 }
 
-// 圆形渐变头像：Feather 图标 + 渐变底色 → PNG data URI（缓存）
-static QString avatarDataUri(const QString & svgPath, const QColor & c1, const QColor & c2) {
+// 圆形渐变头像：Feather 图标 + 渐变底色 → PNG data URI（按「图标+配色+尺寸」缓存）。
+// 按目标显示尺寸的 3~4 倍渲染（Retina 2x 下依然锐利），避免小位图放大产生毛刺；
+// 欢迎页 logo 显示 72px、消息头像显示 26px，分别取 256px / 128px。
+static QString avatarDataUri(const QString & svgPath, const QColor & c1, const QColor & c2, int S) {
     static QHash<QString, QString> cache;
-    const auto it = cache.constFind(svgPath);
+    const QString key = svgPath + c1.name() + c2.name() + QString::number(S);
+    const auto it = cache.constFind(key);
     if (it != cache.constEnd()) {
         return it.value();
     }
-    const int S = 64;
+    const int iconSize = S * 53 / 100; // 图标占圆的 53%，与原先 34/64 的比例一致
     QPixmap pm(S, S);
     pm.fill(Qt::transparent);
     {
         QPainter p(&pm);
         p.setRenderHint(QPainter::Antialiasing);
+        p.setRenderHint(QPainter::SmoothPixmapTransform);
         QLinearGradient g(0, 0, S, S);
         g.setColorAt(0.0, c1);
         g.setColorAt(1.0, c2);
         p.setBrush(g);
         p.setPen(Qt::NoPen);
         p.drawEllipse(0, 0, S, S);
-        const QPixmap iconPm = QIcon(svgPath).pixmap(34, 34);
-        p.drawPixmap((S - 34) / 2, (S - 34) / 2, iconPm);
+        // SVG 图标按高分辨率栅格化后再绘制（QIcon 内部走 SVG 矢量渲染）
+        const QPixmap iconPm = QIcon(svgPath).pixmap(QSize(iconSize, iconSize));
+        p.drawPixmap((S - iconSize) / 2, (S - iconSize) / 2, iconSize, iconSize, iconPm);
     }
     QByteArray png;
     QBuffer buf(&png);
     buf.open(QIODevice::WriteOnly);
     pm.save(&buf, "PNG");
     const QString uri = "data:image/png;base64," + QString::fromLatin1(png.toBase64());
-    cache.insert(svgPath, uri);
+    cache.insert(key, uri);
     return uri;
 }
 
 // 空状态欢迎页（启动时 / 清空对话后）
 static QString welcomeHtml() {
-    const QString logo = avatarDataUri(":/assets/icons/message-circle-white.svg", QColor(0x5b, 0x7c, 0xff), QColor(0x8a, 0x5b, 0xff));
+    const ThemePalette & t = Theme::palette();
+    const QString logo = avatarDataUri(":/assets/icons/message-circle-white.svg",
+                                       t.avatarAssistant1, t.avatarAssistant2, 256);
     return QStringLiteral(
         "<div style=\"text-align:center;margin-top:70px;\">"
         "<img src=\"%1\" width=\"72\" height=\"72\">"
-        "<div style=\"font-size:20px;font-weight:600;color:#3a3a4e;margin-top:16px;\">qllama · 本地大模型对话</div>"
-        "<div style=\"color:#8a8a9e;margin-top:10px;font-size:13px;\">"
+        "<div style=\"font-size:20px;font-weight:600;color:%2;margin-top:16px;\">qllama · 本地大模型对话</div>"
+        "<div style=\"color:%3;margin-top:10px;font-size:13px;\">"
         "选择模型并点击「加载模型」，然后开始对话<br>"
         "支持 Markdown 渲染 · 图片问答 · 长对话上下文复用</div>"
-        "</div>").arg(logo);
+        "</div>").arg(logo, Theme::css(t.welcomeTitle), Theme::css(t.welcomeSubtitle));
 }
 
 // 助手消息头（含/不含“正在生成”状态标记）
 static QString assistantHeaderHtml(bool generating) {
-    const QString avatar = avatarDataUri(":/assets/icons/zap-white.svg", QColor(0x8a, 0x5b, 0xff), QColor(0xd0, 0x6b, 0xff));
+    const ThemePalette & t = Theme::palette();
+    const QString avatar = avatarDataUri(":/assets/icons/zap-white.svg",
+                                         t.avatarAssistant1, t.avatarAssistant2, 128);
     const QString timeStr = QTime::currentTime().toString("HH:mm");
     return QStringLiteral(
         "<div style=\"margin:14px 0 6px 0;\">"
         "<img src=\"%1\" width=\"26\" height=\"26\" style=\"vertical-align:middle;margin-right:8px;\">"
-        "<b style=\"color:#7c5bff;\">助手</b>"
-        "<span style=\"color:#b0b0c0;font-size:11px;margin-left:8px;\">%3</span>"
-        "%2</div>")
-        .arg(avatar,
-             generating ? QStringLiteral("<span style=\"color:#9a9ab0;margin-left:8px;\">正在生成…</span>")
-                        : QString(),
-             timeStr);
+        "<b style=\"color:%2;\">助手</b>"
+        "<span style=\"color:%3;font-size:11px;margin-left:8px;\">%4</span>"
+        "%5</div>")
+        .arg(avatar, Theme::css(t.assistantName), Theme::css(t.textMuted), timeStr,
+             generating ? QStringLiteral("<span style=\"color:%1;margin-left:8px;\">正在生成…</span>")
+                              .arg(Theme::css(t.textSecondary))
+                        : QString());
 }
 
-// 模型状态指示灯颜色
-static void setStatusDot(QLabel * dot, const char * color) {
-    dot->setStyleSheet(QStringLiteral("color: %1; font-size: 13px;").arg(QLatin1String(color)));
+// 助手消息气泡（Markdown HTML 外层）：左对齐，贴合内容宽度
+static QString assistantBubbleHtml(const QString & innerHtml) {
+    const ThemePalette & t = Theme::palette();
+    return QStringLiteral(
+        "<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"padding:0;\">"
+        "<table cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"padding:0;\">"
+        "<div style=\"background:%1;border:1px solid %2;"
+        "border-radius:4px 16px 16px 16px;padding:10px 14px;\">%3</div>"
+        "</td></tr></table></td></tr></table>")
+        .arg(Theme::css(t.assistantBubble), Theme::css(t.assistantBubbleBorder), innerHtml);
+}
+
+// 模型状态指示灯：状态样式在 QSS（QLabel#statusDot[state=...]）
+// state: idle / loading / ok / error
+static void setStatusDot(QLabel * dot, const char * state) {
+    dot->setProperty("state", QLatin1String(state));
+    dot->style()->unpolish(dot);
+    dot->style()->polish(dot);
 }
 
 // 按占用率给监控数值着色：绿 <50%，黄 <80%，红 ≥80%
 static QString coloredPct(double pct, bool withDot = true) {
-    const char * color = pct < 50.0 ? "#2ecc71" : pct < 80.0 ? "#f5a623" : "#e5484d";
+    const ThemePalette & t = Theme::palette();
+    const QColor color = pct < 50.0 ? t.monitorOk : pct < 80.0 ? t.monitorWarn : t.monitorBad;
     return QStringLiteral("<span style=\"color:%1;\">%2</span>")
-        .arg(QLatin1String(color))
+        .arg(Theme::css(color))
         .arg(withDot ? QStringLiteral("● %1%").arg(pct, 0, 'f', 0) : QString::number(pct, 'f', 0));
 }
 
@@ -125,20 +153,14 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     : QMainWindow(parent), m_selfTest(selfTest), m_selfTestPrompt(selfTestPrompt), m_selfTestImage(selfTestImage) {
     ui.setupUi(this); // 界面布局见 ui/mainwindow.ui（Qt Designer 编辑）
     setWindowIcon(QIcon(":/assets/icons/appicon.png"));
+    m_config.theme = Theme::currentName(); // 启动主题由 main() 应用，这里同步到配置
 
     // 滚动区域透明，露出窗口背景
     ui.chatView->viewport()->setAutoFillBackground(false);
     ui.input->viewport()->setAutoFillBackground(false);
 
-    // —— 按钮图标（Feather 图标，见 assets/icons） ——
-    ui.browseModelBtn->setIcon(QIcon(":/assets/icons/folder.svg"));
-    ui.loadBtn->setIcon(QIcon(":/assets/icons/play-circle-white.svg"));
-    ui.unloadBtn->setIcon(QIcon(":/assets/icons/x-circle.svg"));
-    ui.clearBtn->setIcon(QIcon(":/assets/icons/trash-2.svg"));
-    ui.configBtn->setIcon(QIcon(":/assets/icons/sliders.svg"));
-    ui.addImageBtn->setIcon(QIcon(":/assets/icons/image.svg"));
-    ui.sendBtn->setIcon(QIcon(":/assets/icons/send-white.svg"));
-    ui.stopBtn->setIcon(QIcon(":/assets/icons/square-white.svg"));
+    // —— 按钮图标（Feather 图标，按当前主题着色，见 Theme::icon） ——
+    refreshIcons();
     const QList<QPushButton *> iconBtns = {
         ui.browseModelBtn, ui.loadBtn, ui.unloadBtn, ui.clearBtn,
         ui.configBtn, ui.addImageBtn, ui.sendBtn, ui.stopBtn,
@@ -189,8 +211,8 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
 
     ui.chatView->append(welcomeHtml());
 
-    // 模型状态指示灯（灰=未加载，黄=加载中，绿=已加载，红=失败）
-    setStatusDot(ui.statusDot, "#9a9aa8");
+    // 模型状态指示灯（灰=未加载，黄=加载中，绿=已加载，红=失败；颜色在 QSS）
+    setStatusDot(ui.statusDot, "idle");
 
     // —— 系统监控：CPU / 内存 / GPU（2 秒刷新，状态栏右侧常驻） ——
     m_monitorLabel = new QLabel(QStringLiteral("CPU — · 内存 — · GPU —"));
@@ -204,7 +226,9 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
                 qInfo().noquote() << "MONITOR: cpu=" << cpu << " mem=" << mem << " gpu=" << gpu;
             }
         }
-        const QString gpuText = gpu >= 0 ? coloredPct(gpu) : QStringLiteral("<span style=\"color:#9a9aa8;\">—</span>");
+        const QString gpuText = gpu >= 0 ? coloredPct(gpu)
+                                         : QStringLiteral("<span style=\"color:%1;\">—</span>")
+                                               .arg(Theme::css(Theme::palette().monitorNA));
         m_monitorLabel->setText(QStringLiteral("CPU %1 · 内存 %2 · GPU %3")
                                     .arg(coloredPct(cpu), coloredPct(mem), gpuText));
         m_monitorLabel->setToolTip(QStringLiteral("系统级：CPU 利用率 · 内存占用率（活动监视器口径）· GPU 利用率"));
@@ -327,8 +351,19 @@ void MainWindow::browseModel() {
 void MainWindow::onConfig() {
     ConfigDialog dlg(m_config, this);
     if (dlg.exec() == QDialog::Accepted) {
+        const QString oldTheme = m_config.theme;
         m_config = dlg.config();
+        if (m_config.theme != oldTheme) {
+            // 主题已在配置页实时预览；这里确认应用并重建聊天记录（HTML 颜色随主题）
+            QSettings().setValue("ui/theme", m_config.theme);
+            Theme::apply(m_config.theme);
+            refreshIcons();
+            rebuildChatView();
+        }
         statusBar()->showMessage("配置已更新", 3000);
+    } else {
+        // 取消：恢复到打开配置页前的主题（期间可能被实时预览改过）
+        Theme::apply(m_config.theme);
     }
 }
 
@@ -369,7 +404,7 @@ void MainWindow::onLoadModel() {
     }
     prefillMmprojForModel();
     ui.loadBtn->setEnabled(false);
-    setStatusDot(ui.statusDot, "#f5a623"); // 加载中
+    setStatusDot(ui.statusDot, "loading"); // 加载中
     statusBar()->showMessage("正在加载模型，请稍候……");
     emit loadRequested(path, m_config.chat);
 }
@@ -491,7 +526,7 @@ void MainWindow::onModelLoaded(const QString & info, bool hasVision) {
     ui.loadBtn->setEnabled(false);
     ui.unloadBtn->setEnabled(true);
     ui.sendBtn->setEnabled(!ui.input->toPlainText().trimmed().isEmpty()); // 输入为空时保持禁用
-    setStatusDot(ui.statusDot, "#2ecc71"); // 已加载
+    setStatusDot(ui.statusDot, "ok"); // 已加载
     QString summary = "已加载 " + info + (hasVision ? " · 多模态" : "")
                       + QString(" · 上下文 %1 · 温度 %2")
                             .arg(m_config.chat.n_ctx)
@@ -514,7 +549,7 @@ void MainWindow::onModelLoaded(const QString & info, bool hasVision) {
 
 void MainWindow::onModelLoadFailed(const QString & err) {
     ui.loadBtn->setEnabled(true);
-    setStatusDot(ui.statusDot, "#e5484d"); // 加载失败
+    setStatusDot(ui.statusDot, "error"); // 加载失败
     statusBar()->showMessage("模型加载失败");
     QMessageBox::critical(this, "加载失败", err);
     if (m_selfTest) {
@@ -528,7 +563,7 @@ void MainWindow::onModelUnloaded() {
     ui.loadBtn->setEnabled(true);
     ui.unloadBtn->setEnabled(false);
     ui.sendBtn->setEnabled(false);
-    setStatusDot(ui.statusDot, "#9a9aa8"); // 未加载
+    setStatusDot(ui.statusDot, "idle"); // 未加载
     statusBar()->showMessage("未加载模型");
 }
 
@@ -552,13 +587,7 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
         cur.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
         cur.removeSelectedText();
         if (!text.isEmpty()) {
-            cur.insertHtml(QStringLiteral(
-                "<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"padding:0;\">"
-                "<table cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"padding:0;\">"
-                "<div style=\"background:rgba(255,255,255,0.72);border:1px solid rgba(255,255,255,0.95);"
-                "border-radius:4px 16px 16px 16px;padding:10px 14px;\">%1</div>"
-                "</td></tr></table></td></tr></table>")
-                .arg(Markdown::toHtml(text)));
+            cur.insertHtml(assistantBubbleHtml(Markdown::toHtml(text)));
         }
     } else if (!text.isEmpty()) {
         // 兜底：起点失效（如生成期间清空了对话），直接追加
@@ -572,8 +601,9 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
     }
     // 统计行（替代分隔线）：生成 token 数、速度、本轮解码量
     ui.chatView->append(QStringLiteral(
-        "<div style=\"color:#b0b0c0;font-size:11px;margin:4px 0 14px 0;\">"
-        "生成 %1 token · %2 tok/s · 本轮解码 %3 token</div>")
+        "<div style=\"color:%1;font-size:11px;margin:4px 0 14px 0;\">"
+        "生成 %2 token · %3 tok/s · 本轮解码 %4 token</div>")
+        .arg(Theme::css(Theme::palette().statText))
         .arg(result.generated_tokens)
         .arg(result.tokens_per_sec, 0, 'f', 1)
         .arg(result.prompt_tokens));
@@ -594,6 +624,16 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
                                  .arg(result.tokens_per_sec, 0, 'f', 1);
         qInfo().noquote() << "SELFTEST 回复:" << text;
         if (m_selfTestTurn == 1) {
+            // 调试：QLLAMA_TEST_THEME_SWITCH=<light|dark|pink> 时在两轮之间切换主题，
+            // 验证「实时切换 + 聊天记录按新配色重建」全链路
+            const QByteArray switchTo = qgetenv("QLLAMA_TEST_THEME_SWITCH");
+            if (!switchTo.isEmpty()) {
+                Theme::apply(QString::fromUtf8(switchTo));
+                m_config.theme = Theme::currentName();
+                refreshIcons();
+                rebuildChatView();
+                qInfo().noquote() << "THEMESWITCH:" << m_config.theme;
+            }
             // 第二轮验证长对话 KV 增量复用
             QTimer::singleShot(500, this, [this] { selfTestAsk("你刚才说了什么？"); });
         } else {
@@ -611,8 +651,8 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
 void MainWindow::onGenerationFailed(const QString & err) {
     finishAssistantHeader(); // 移除“正在生成”标记
     m_assistantStartPos = -1;
-    ui.chatView->append(QStringLiteral("<div style=\"color:#c62828;margin:6px 0;\">生成失败：%1</div>")
-                            .arg(err.toHtmlEscaped()));
+    ui.chatView->append(QStringLiteral("<div style=\"color:%1;margin:6px 0;\">生成失败：%2</div>")
+                            .arg(Theme::css(Theme::palette().errorText), err.toHtmlEscaped()));
     setGenerating(false);
     statusBar()->showMessage("生成失败");
     if (m_selfTest) {
@@ -653,14 +693,17 @@ void MainWindow::appendUserMessage(const QString & text, const QStringList & ima
     // 结构：一个 100% 宽的表格，头部行与气泡行都是右对齐单元格——
     // div 的 text-align 在 QTextDocument 里不可靠（与表格同段时会被
     // 塞进共享单元格结构，对齐退化为相对气泡内容宽度）。
-    const QString avatar = avatarDataUri(":/assets/icons/user-white.svg", QColor(0x4a, 0x7d, 0xff), QColor(0x6a, 0x5b, 0xff));
+    const ThemePalette & t = Theme::palette();
+    const QString avatar = avatarDataUri(":/assets/icons/user-white.svg",
+                                         t.avatarUser1, t.avatarUser2, 128);
     const QString timeStr = QTime::currentTime().toString("HH:mm");
     const QString headerRow = QStringLiteral(
         "<tr><td align=\"right\" style=\"padding:14px 0 6px 0;\">"
-        "<span style=\"color:#b0b0c0;font-size:11px;margin-right:8px;\">%3</span>"
-        "<b style=\"color:#3a6df0;\">你</b>"
-        "<img src=\"%1\" width=\"26\" height=\"26\" style=\"vertical-align:middle;margin-left:8px;\">"
-        "</td></tr>").arg(avatar, QString(), timeStr);
+        "<span style=\"color:%1;font-size:11px;margin-right:8px;\">%2</span>"
+        "<b style=\"color:%3;\">你</b>"
+        "<img src=\"%4\" width=\"26\" height=\"26\" style=\"vertical-align:middle;margin-left:8px;\">"
+        "</td></tr>")
+        .arg(Theme::css(t.textMuted), timeStr, Theme::css(t.userName), avatar);
 
     QString bodyRows;
     // 图片行（右对齐）
@@ -684,14 +727,52 @@ void MainWindow::appendUserMessage(const QString & text, const QStringList & ima
         bodyRows += QStringLiteral(
             "<tr><td align=\"right\" style=\"padding:0;\">"
             "<table cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"padding:0;\">"
-            "<div style=\"background:rgba(74,125,255,0.92);border-radius:16px 16px 4px 16px;"
-            "padding:10px 14px;color:#ffffff;\">%1</div>"
-            "</td></tr></table></td></tr>").arg(esc);
+            "<div style=\"background:%1;border-radius:16px 16px 4px 16px;"
+            "padding:10px 14px;color:%2;\">%3</div>"
+            "</td></tr></table></td></tr>")
+            .arg(Theme::css(t.userBubble), Theme::css(t.userBubbleText), esc);
     }
 
     ui.chatView->append(QStringLiteral(
         "<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\">%1%2</table>")
         .arg(headerRow, bodyRows));
+}
+
+// 按当前主题重建整个聊天记录（切换主题后调用）
+void MainWindow::rebuildChatView() {
+    ui.chatView->clear();
+    if (m_history.isEmpty()) {
+        ui.chatView->append(welcomeHtml());
+        return;
+    }
+    for (const ChatMessage & m : m_history) {
+        QString content = QString::fromStdString(m.content);
+        if (m.role == "user") {
+            content.remove(QStringLiteral("<__media__>")); // 图片标记不显示
+            QStringList images;
+            for (const auto & p : m.imagePaths) {
+                images << QString::fromStdString(p);
+            }
+            appendUserMessage(content.trimmed(), images);
+        } else if (m.role == "assistant") {
+            ui.chatView->append(assistantHeaderHtml(false));
+            if (!content.isEmpty()) {
+                ui.chatView->append(assistantBubbleHtml(Markdown::toHtml(content)));
+            }
+        }
+    }
+}
+
+// 主窗口按钮图标：按当前主题重新着色
+void MainWindow::refreshIcons() {
+    ui.browseModelBtn->setIcon(Theme::icon("folder"));
+    ui.loadBtn->setIcon(Theme::icon("play-circle-white"));
+    ui.unloadBtn->setIcon(Theme::icon("x-circle"));
+    ui.clearBtn->setIcon(Theme::icon("trash-2"));
+    ui.configBtn->setIcon(Theme::icon("sliders"));
+    ui.addImageBtn->setIcon(Theme::icon("image"));
+    ui.sendBtn->setIcon(Theme::icon("send-white"));
+    ui.stopBtn->setIcon(Theme::icon("square-white"));
 }
 
 void MainWindow::appendAssistantHeader() {

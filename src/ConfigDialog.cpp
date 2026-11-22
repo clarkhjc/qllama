@@ -1,5 +1,6 @@
 #include "ConfigDialog.h"
 #include "Logging.h"
+#include "Theme.h"
 
 #include <QCheckBox>
 #include <QDesktopServices>
@@ -26,6 +27,12 @@ ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog
     ui.nPredictSpin->setValue(config.chat.n_predict);
     ui.systemPromptEdit->setText(config.systemPrompt);
 
+    // 主题（当前生效值；按钮点击立即预览）
+    m_theme = Theme::normalized(config.theme);
+    ui.themeLightBtn->setChecked(m_theme == "light");
+    ui.themeDarkBtn->setChecked(m_theme == "dark");
+    ui.themePinkBtn->setChecked(m_theme == "pink");
+
     ui.mmprojEdit->setText(QString::fromStdString(config.chat.mmprojPath));
     ui.topKSpin->setValue(config.chat.top_k);
     ui.topPSpin->setValue(config.chat.top_p);
@@ -49,16 +56,16 @@ ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog
     ui.buttonBox->button(QDialogButtonBox::Ok)->setText("确定");
     ui.buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
 
-    // —— 图标 ——
-    ui.browseMmprojBtn->setIcon(QIcon(":/assets/icons/folder.svg"));
-    ui.buttonBox->button(QDialogButtonBox::Ok)->setIcon(QIcon(":/assets/icons/check.svg"));
-    ui.buttonBox->button(QDialogButtonBox::Cancel)->setIcon(QIcon(":/assets/icons/x.svg"));
-    ui.tabs->setTabIcon(0, QIcon(":/assets/icons/star.svg"));     // 精简配置
-    ui.tabs->setTabIcon(1, QIcon(":/assets/icons/settings.svg")); // 全量配置
+    // 主题切换按钮：点击立即应用（实时预览；取消时主窗口会恢复原主题）
+    connect(ui.themeLightBtn, &QPushButton::clicked, this, [this] { setTheme("light"); });
+    connect(ui.themeDarkBtn, &QPushButton::clicked, this, [this] { setTheme("dark"); });
+    connect(ui.themePinkBtn, &QPushButton::clicked, this, [this] { setTheme("pink"); });
+
+    // —— 图标（单色 SVG 按主题着色，见 Theme::icon） ——
+    refreshIcons();
     ui.tabs->setIconSize(QSize(16, 16));
 
     // —— 打开日志：在 Finder 中定位日志文件 ——
-    ui.openLogBtn->setIcon(QIcon(":/assets/icons/folder.svg"));
     ui.openLogBtn->setToolTip("日志文件：" + logFilePath());
     connect(ui.openLogBtn, &QPushButton::clicked, this, [] {
         const QString path = logFilePath();
@@ -68,9 +75,26 @@ ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog
     });
 }
 
+// 主题按钮：应用并重设图标（QSS 由 Theme::apply 全局替换）
+void ConfigDialog::setTheme(const QString & name) {
+    m_theme = Theme::normalized(name);
+    Theme::apply(m_theme);
+    refreshIcons();
+}
+
+void ConfigDialog::refreshIcons() {
+    ui.browseMmprojBtn->setIcon(Theme::icon("folder"));
+    ui.buttonBox->button(QDialogButtonBox::Ok)->setIcon(Theme::icon("check"));
+    ui.buttonBox->button(QDialogButtonBox::Cancel)->setIcon(Theme::icon("x"));
+    ui.openLogBtn->setIcon(Theme::icon("folder"));
+    ui.tabs->setTabIcon(0, Theme::icon("star"));     // 精简配置
+    ui.tabs->setTabIcon(1, Theme::icon("settings")); // 全量配置
+}
+
 AppConfig ConfigDialog::config() const {
     AppConfig c;
     c.systemPrompt = ui.systemPromptEdit->text().trimmed();
+    c.theme        = m_theme;
 
     ChatOptions & o = c.chat;
     o.n_ctx           = (uint32_t) ui.ctxSpin->value();

@@ -1,4 +1,5 @@
 #include "Markdown.h"
+#include "Theme.h"
 
 #include <QRegularExpression>
 #include <QStringList>
@@ -38,11 +39,12 @@ QString inlineFormat(QString s) {
         return QStringLiteral("\x01%1\x02").arg(codePieces.size() - 1);
     });
 
-    // 2. 链接（主题蓝）
+    // 2. 链接（主题色）
     static const QRegularExpression reLink(R"(\[([^\]]+)\]\(([^)]+)\))");
-    s = replaceAll(s, reLink, [](const QRegularExpressionMatch & m) {
-        return QStringLiteral("<a href=\"%1\" style=\"color:#3a6df0;text-decoration:underline;\">%2</a>")
-            .arg(escape(m.captured(2)), escape(m.captured(1)));
+    const QString linkColor = Theme::css(Theme::palette().link);
+    s = replaceAll(s, reLink, [&linkColor](const QRegularExpressionMatch & m) {
+        return QStringLiteral("<a href=\"%1\" style=\"color:%2;text-decoration:underline;\">%3</a>")
+            .arg(escape(m.captured(2)), linkColor, escape(m.captured(1)));
     });
 
     // 3. 加粗
@@ -57,12 +59,14 @@ QString inlineFormat(QString s) {
         return QStringLiteral("<i>%1</i>").arg(escape(m.captured(1)));
     });
 
-    // 5. 恢复行内代码
+    // 5. 恢复行内代码（主题色）
+    const ThemePalette & t = Theme::palette();
     for (int i = 0; i < codePieces.size(); i++) {
         s.replace(QStringLiteral("\x01%1\x02").arg(i),
-                  QStringLiteral("<code style=\"background:rgba(91,124,255,0.10);color:#c04a7c;"
-                                 "padding:1px 5px;border-radius:4px;font-family:Menlo,monospace;\">%1</code>")
-                      .arg(escape(codePieces[i])));
+                  QStringLiteral("<code style=\"background:%1;color:%2;"
+                                 "padding:1px 5px;border-radius:4px;font-family:Menlo,monospace;\">%3</code>")
+                      .arg(Theme::css(t.inlineCodeBg), Theme::css(t.inlineCodeText),
+                           escape(codePieces[i])));
     }
     return s;
 }
@@ -115,6 +119,7 @@ static QStringList tableCells(const QString & line) {
 } // namespace
 
 QString Markdown::toHtml(const QString & md) {
+    const ThemePalette & t = Theme::palette();
     const QStringList lines = md.split('\n');
 
     static const QRegularExpression reH   (R"(^(#{1,4})\s+(.*)$)");
@@ -143,14 +148,14 @@ QString Markdown::toHtml(const QString & md) {
             i++; // 跳过闭合 ```
             const QString labelBar = lang.isEmpty() ? QString()
                 : QStringLiteral(
-                      "<div style=\"background:#2b2b40;color:#9a9ac0;font-family:Menlo,monospace;"
-                      "font-size:12px;padding:5px 12px;border-radius:10px 10px 0 0;\">%1</div>")
-                      .arg(escape(lang));
+                      "<div style=\"background:%1;color:%2;font-family:Menlo,monospace;"
+                      "font-size:12px;padding:5px 12px;border-radius:10px 10px 0 0;\">%3</div>")
+                      .arg(Theme::css(t.codeHeaderBg), Theme::css(t.codeHeaderText), escape(lang));
             out << QStringLiteral(
-                       "<div style=\"background:#1e1e2e;border-radius:10px;margin:8px 0;\">%1"
-                       "<pre style=\"background:transparent;color:#e8e8f0;font-family:Menlo,monospace;"
-                       "font-size:13px;padding:8px 12px;margin:0;\">%2</pre></div>")
-                       .arg(labelBar, escape(code));
+                       "<div style=\"background:%1;border-radius:10px;margin:8px 0;\">%2"
+                       "<pre style=\"background:transparent;color:%3;font-family:Menlo,monospace;"
+                       "font-size:13px;padding:8px 12px;margin:0;\">%4</pre></div>")
+                       .arg(Theme::css(t.codeBg), labelBar, Theme::css(t.codeText), escape(code));
             continue;
         }
 
@@ -171,13 +176,14 @@ QString Markdown::toHtml(const QString & md) {
             }
             QString head = QStringLiteral("<tr>");
             for (const QString & c : header) {
-                head += QStringLiteral("<th bgcolor=\"#e9ecf7\" align=\"left\">%1</th>").arg(inlineFormat(c));
+                head += QStringLiteral("<th bgcolor=\"%1\" align=\"left\">%2</th>")
+                            .arg(Theme::css(t.tableHeaderBg), inlineFormat(c));
             }
             head += QStringLiteral("</tr>");
             out << QStringLiteral(
                        "<table border=\"1\" cellspacing=\"0\" cellpadding=\"6\" width=\"100%\" "
-                       "style=\"border-color:#d8dbe8;border-radius:8px;margin:6px 0;\">%1%2</table>")
-                       .arg(head, rows.join(""));
+                       "style=\"border-color:%1;border-radius:8px;margin:6px 0;\">%2%3</table>")
+                       .arg(Theme::css(t.tableBorder), head, rows.join(""));
             continue;
         }
 
@@ -199,7 +205,7 @@ QString Markdown::toHtml(const QString & md) {
             continue;
         }
 
-        // 引用（主题蓝左边框 + 浅蓝底）
+        // 引用（主题色左边框 + 半透明底）
         if (line.trimmed().startsWith('>')) {
             QStringList quote;
             while (i < lines.size() && lines[i].trimmed().startsWith('>')) {
@@ -207,9 +213,10 @@ QString Markdown::toHtml(const QString & md) {
                 i++;
             }
             out << QStringLiteral(
-                       "<blockquote style=\"background:rgba(91,124,255,0.10);border-left:3px solid #5b7cff;"
-                       "margin:6px 0;padding:6px 12px;color:#5a5a70;\">%1</blockquote>")
-                       .arg(inlineFormat(quote.join("<br>")));
+                       "<blockquote style=\"background:%1;border-left:3px solid %2;"
+                       "margin:6px 0;padding:6px 12px;color:%3;\">%4</blockquote>")
+                       .arg(Theme::css(t.quoteBg), Theme::css(t.quoteBorder),
+                            Theme::css(t.quoteText), inlineFormat(quote.join("<br>")));
             continue;
         }
 
@@ -224,7 +231,8 @@ QString Markdown::toHtml(const QString & md) {
                 const bool done = m.captured(1) != " ";
                 QString content = inlineFormat(m.captured(2));
                 if (done) {
-                    content = QStringLiteral("<s style=\"color:#9a9ab0;\">%1</s>").arg(content);
+                    content = QStringLiteral("<s style=\"color:%1;\">%2</s>")
+                                  .arg(Theme::css(t.textMuted), content);
                 }
                 items << QStringLiteral("<li style=\"list-style-type:none;\">%1 %2</li>")
                              .arg(done ? QStringLiteral("☑") : QStringLiteral("☐"), content);

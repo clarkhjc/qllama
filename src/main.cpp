@@ -1,8 +1,9 @@
 #include "Logging.h"
 #include "MainWindow.h"
+#include "Theme.h"
 
 #include <QApplication>
-#include <QFile>
+#include <QSettings>
 
 int main(int argc, char * argv[]) {
     QApplication app(argc, argv);
@@ -12,16 +13,13 @@ int main(int argc, char * argv[]) {
 
     setupFileLogging(); // 日志文件：~/Library/Logs/qllama/qllama.log
 
-    // 全局玻璃质感主题（assets/theme.qss）
-    QFile theme(":/theme.qss");
-    if (theme.open(QIODevice::ReadOnly)) {
-        app.setStyleSheet(QString::fromUtf8(theme.readAll()));
+    // 主题：QLLAMA_THEME 环境变量（调试/截图）> 上次选择（QSettings）> 浅色
+    const QSettings settings;
+    QString theme = settings.value("ui/theme", "light").toString();
+    if (qEnvironmentVariableIsSet("QLLAMA_THEME")) {
+        theme = qEnvironmentVariable("QLLAMA_THEME");
     }
-
-    // 输入框占位文字颜色（统一浅灰）
-    QPalette pal = app.palette();
-    pal.setColor(QPalette::PlaceholderText, QColor(0x9a, 0x9a, 0xb0));
-    app.setPalette(pal);
+    Theme::apply(theme); // 加载 assets/themes/<name>.qss + 调色板
 
     // 跨线程 QueuedConnection 需要注册自定义类型的元类型
     qRegisterMetaType<ChatOptions>("ChatOptions");

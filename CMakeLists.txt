@@ -75,6 +75,8 @@ add_executable(qllama MACOSX_BUNDLE
     src/ModelManageDialog.h
     src/SysMonitor.cpp
     src/SysMonitor.h
+    src/Theme.cpp
+    src/Theme.h
     ui/mainwindow.ui
     ui/configdialog.ui
     ui/modelmanagedialog.ui

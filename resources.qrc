@@ -1,6 +1,8 @@
 <RCC>
     <qresource prefix="/">
-        <file>assets/theme.qss</file>
+        <file>assets/themes/light.qss</file>
+        <file>assets/themes/dark.qss</file>
+        <file>assets/themes/pink.qss</file>
         <file>assets/icons/send.svg</file>
         <file>assets/icons/send-white.svg</file>
         <file>assets/icons/square.svg</file>

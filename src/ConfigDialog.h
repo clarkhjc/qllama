@@ -10,6 +10,7 @@
 // 应用完整配置：UI 层配置 + llama.cpp 参数
 struct AppConfig {
     QString     systemPrompt; // 系统提示词（空 = 不注入）
+    QString     theme = QStringLiteral("light"); // 界面主题：light / dark / pink
     ChatOptions chat;         // 采样 / 性能 / 多模态参数
 };
 
@@ -25,5 +26,9 @@ private slots:
     void browseMmproj();
 
 private:
+    void setTheme(const QString & name); // 主题按钮：立即预览
+    void refreshIcons();                 // 主题切换后按新主题重设图标
+
     Ui::ConfigDialog ui;
+    QString m_theme = QStringLiteral("light");
 };
