@@ -1,5 +1,5 @@
-#include "ModelListModel.h"
-#include "I18n.h"
+#include "ui/ModelListModel.h"
+#include "common/I18n.h"
 
 namespace {
 

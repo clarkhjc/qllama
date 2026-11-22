@@ -1,5 +1,5 @@
-#include "Markdown.h"
-#include "Theme.h"
+#include "chat/Markdown.h"
+#include "common/Theme.h"
 
 #include <QRegularExpression>
 #include <QStringList>

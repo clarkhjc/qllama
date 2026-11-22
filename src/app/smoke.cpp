@@ -3,7 +3,7 @@
 //   多个提示词 = 多轮对话；只有一个提示词时默认问“你好，请用一句话介绍你自己”。
 //   --mmproj 加载多模态投影模型；--image 图片随第一轮提示词发送（可多次指定）。
 
-#include "LlamaChat.h"
+#include "chat/LlamaChat.h"
 
 #include <atomic>
 #include <cstdio>

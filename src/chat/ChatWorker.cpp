@@ -1,4 +1,4 @@
-#include "ChatWorker.h"
+#include "chat/ChatWorker.h"
 
 #include <algorithm>
 

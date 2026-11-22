@@ -1,6 +1,6 @@
 #pragma once
 
-#include "LlamaChat.h"
+#include "chat/LlamaChat.h"
 
 #include <QObject>
 #include <QString>

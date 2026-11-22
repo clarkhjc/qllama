@@ -99,7 +99,7 @@ cmake --build build
   （窗口渐变底、玻璃卡片、按钮、输入框、标签页、表格、滚动条、进度条、状态灯、
   主题切换按钮等）都集中在这三个文件里，经 `resources.qrc` 编译进二进制
 - **调色板**：QSS 无法覆盖的部分（聊天记录 HTML、Markdown 代码块/表格/引用、
-  头像渐变、单色 SVG 图标着色、系统监控颜色）由 `src/Theme.h/.cpp` 的
+  头像渐变、单色 SVG 图标着色、系统监控颜色）由 `src/common/Theme.h/.cpp` 的
   `ThemePalette` 提供，与同名 QSS 配色保持一致
 - **图标**：`assets/icons/`（Feather 图标，MIT 协议）；深色主题下非白色图标
   由 `Theme::icon()` 自动着色，白色变体（`-white.svg`）保持原样用于渐变按钮/头像
@@ -111,11 +111,20 @@ cmake --build build
 可直接用 **Qt Creator 双击打开**进入 Designer 可视化编辑；CMake 的 AUTOUIC 自动生成
 `ui_*.h`。控件交互、流式渲染、线程等动态逻辑在 `src/` 对应类中：
 
+```
+src/
+  app/      入口（main.cpp、smoke.cpp）
+  chat/     推理与聊天渲染（LlamaChat、ChatWorker、Markdown）
+  ui/       窗口与对话框（MainWindow、ConfigDialog、ModelManageDialog、ModelListModel）
+  common/   主题、国际化、日志（Theme、I18n、Logging）
+  system/   系统监控（SysMonitor）
+```
+
 | .ui 文件 | 生成的类 | 对应源码 |
 |---|---|---|
-| ui/mainwindow.ui | `Ui::MainWindow` | src/MainWindow.h/.cpp |
-| ui/configdialog.ui | `Ui::ConfigDialog` | src/ConfigDialog.h/.cpp |
-| ui/modelmanagedialog.ui | `Ui::ModelManageDialog` | src/ModelManageDialog.h/.cpp |
+| ui/mainwindow.ui | `Ui::MainWindow` | src/ui/MainWindow.h/.cpp |
+| ui/configdialog.ui | `Ui::ConfigDialog` | src/ui/ConfigDialog.h/.cpp |
+| ui/modelmanagedialog.ui | `Ui::ModelManageDialog` | src/ui/ModelManageDialog.h/.cpp |
 
 
 ## 使用

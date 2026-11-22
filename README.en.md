@@ -111,7 +111,7 @@ Artifacts:
   status dot, theme buttons, …) is defined there, compiled into the binary via `resources.qrc`
 - **Palette**: what QSS cannot reach (chat HTML, Markdown code blocks/tables/quotes, avatar
   gradients, monochrome SVG icon tinting, system-monitor colors) comes from the `ThemePalette`
-  in `src/Theme.h/.cpp`, kept in sync with the matching QSS
+  in `src/common/Theme.h/.cpp`, kept in sync with the matching QSS
 - **Icons**: `assets/icons/` (Feather icons, MIT license); in the dark theme non-white icons are
   tinted by `Theme::icon()`, while the `-white.svg` variants stay as-is for gradient buttons/avatars
 - **Debug**: the `QLLAMA_THEME=dark` environment variable forces the startup theme
@@ -124,11 +124,20 @@ double-click them in **Qt Creator** to open the visual Designer; CMake's AUTOUIC
 `ui_*.h` headers. Widget interaction, streaming rendering, threading and other dynamic logic live
 in the corresponding classes under `src/`:
 
+```
+src/
+  app/      entry points (main.cpp, smoke.cpp)
+  chat/     inference & chat rendering (LlamaChat, ChatWorker, Markdown)
+  ui/       windows & dialogs (MainWindow, ConfigDialog, ModelManageDialog, ModelListModel)
+  common/   theme, i18n, logging (Theme, I18n, Logging)
+  system/   system monitor (SysMonitor)
+```
+
 | .ui file | Generated class | Source code |
 |---|---|---|
-| ui/mainwindow.ui | `Ui::MainWindow` | src/MainWindow.h/.cpp |
-| ui/configdialog.ui | `Ui::ConfigDialog` | src/ConfigDialog.h/.cpp |
-| ui/modelmanagedialog.ui | `Ui::ModelManageDialog` | src/ModelManageDialog.h/.cpp |
+| ui/mainwindow.ui | `Ui::MainWindow` | src/ui/MainWindow.h/.cpp |
+| ui/configdialog.ui | `Ui::ConfigDialog` | src/ui/ConfigDialog.h/.cpp |
+| ui/modelmanagedialog.ui | `Ui::ModelManageDialog` | src/ui/ModelManageDialog.h/.cpp |
 
 ## Usage
 

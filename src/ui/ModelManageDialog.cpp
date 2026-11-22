@@ -1,7 +1,7 @@
-#include "ModelManageDialog.h"
-#include "I18n.h"
-#include "ModelListModel.h"
-#include "Theme.h"
+#include "ui/ModelManageDialog.h"
+#include "common/I18n.h"
+#include "ui/ModelListModel.h"
+#include "common/Theme.h"
 
 #include <QApplication>
 #include <QClipboard>

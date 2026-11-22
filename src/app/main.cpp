@@ -1,8 +1,8 @@
-#include "I18n.h"
-#include "Logging.h"
-#include "MainWindow.h"
-#include "Markdown.h"
-#include "Theme.h"
+#include "common/I18n.h"
+#include "common/Logging.h"
+#include "ui/MainWindow.h"
+#include "chat/Markdown.h"
+#include "common/Theme.h"
 
 #include <QApplication>
 #include <QDir>

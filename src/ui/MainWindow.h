@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ChatWorker.h"
-#include "ConfigDialog.h"
-#include "SysMonitor.h"
+#include "chat/ChatWorker.h"
+#include "ui/ConfigDialog.h"
+#include "system/SysMonitor.h"
 
 #include <QMainWindow>
 

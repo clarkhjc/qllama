@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ConfigDialog.h"
+#include "ui/ConfigDialog.h"
 
 #include <QDialog>
 #include <QFile>

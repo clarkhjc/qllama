@@ -55,32 +55,32 @@ target_link_libraries(llamacpp_deps INTERFACE
 # 运行时通过 @rpath 找到 libllama / libggml-* / libllama-common
 target_link_options(llamacpp_deps INTERFACE "-Wl,-rpath,${LLAMA_BIN_DIR}")
 
-set(LLAMA_SRCS src/LlamaChat.cpp)
+set(LLAMA_SRCS src/chat/LlamaChat.cpp)
 
 # ---------- GUI 客户端 ----------
 add_executable(qllama MACOSX_BUNDLE
-    src/main.cpp
-    src/MainWindow.cpp
-    src/MainWindow.h
-    src/ConfigDialog.cpp
-    src/ConfigDialog.h
-    src/ChatWorker.cpp
-    src/ChatWorker.h
-    src/I18n.cpp
-    src/I18n.h
-    src/LlamaChat.h
-    src/Logging.cpp
-    src/Logging.h
-    src/Markdown.cpp
-    src/Markdown.h
-    src/ModelManageDialog.cpp
-    src/ModelManageDialog.h
-    src/ModelListModel.cpp
-    src/ModelListModel.h
-    src/SysMonitor.cpp
-    src/SysMonitor.h
-    src/Theme.cpp
-    src/Theme.h
+    src/app/main.cpp
+    src/ui/MainWindow.cpp
+    src/ui/MainWindow.h
+    src/ui/ConfigDialog.cpp
+    src/ui/ConfigDialog.h
+    src/chat/ChatWorker.cpp
+    src/chat/ChatWorker.h
+    src/common/I18n.cpp
+    src/common/I18n.h
+    src/chat/LlamaChat.h
+    src/common/Logging.cpp
+    src/common/Logging.h
+    src/chat/Markdown.cpp
+    src/chat/Markdown.h
+    src/ui/ModelManageDialog.cpp
+    src/ui/ModelManageDialog.h
+    src/ui/ModelListModel.cpp
+    src/ui/ModelListModel.h
+    src/system/SysMonitor.cpp
+    src/system/SysMonitor.h
+    src/common/Theme.cpp
+    src/common/Theme.h
     ui/mainwindow.ui
     ui/configdialog.ui
     ui/modelmanagedialog.ui
@@ -90,6 +90,7 @@ add_executable(qllama MACOSX_BUNDLE
     README.md
     README.en.md
     pack.sh)
+target_include_directories(qllama PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(qllama PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "qllama"
     MACOSX_BUNDLE_GUI_IDENTIFIER "local.qllama"
@@ -103,5 +104,6 @@ if (APPLE AND EXISTS "/opt/homebrew/opt/qt/lib")
 endif()
 
 # ---------- 冒烟测试（无 GUI，验证 llama.cpp 集成是否正常） ----------
-add_executable(qllama_smoke src/smoke.cpp ${LLAMA_SRCS})
+add_executable(qllama_smoke src/app/smoke.cpp ${LLAMA_SRCS})
+target_include_directories(qllama_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(qllama_smoke PRIVATE llamacpp_deps)

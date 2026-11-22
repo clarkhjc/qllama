@@ -1,8 +1,8 @@
-#include "MainWindow.h"
-#include "I18n.h"
-#include "Markdown.h"
-#include "ModelManageDialog.h"
-#include "Theme.h"
+#include "ui/MainWindow.h"
+#include "common/I18n.h"
+#include "chat/Markdown.h"
+#include "ui/ModelManageDialog.h"
+#include "common/Theme.h"
 
 #include <QBuffer>
 #include <QCheckBox>

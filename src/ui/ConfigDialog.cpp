@@ -1,7 +1,7 @@
-#include "ConfigDialog.h"
-#include "I18n.h"
-#include "Logging.h"
-#include "Theme.h"
+#include "ui/ConfigDialog.h"
+#include "common/I18n.h"
+#include "common/Logging.h"
+#include "common/Theme.h"
 
 #include <QCheckBox>
 #include <QDesktopServices>
