@@ -27,5 +27,11 @@
         <file>assets/icons/appicon.png</file>
         <file>assets/icons/star.svg</file>
         <file>assets/icons/settings.svg</file>
+        <file>assets/icons/chevron-up.svg</file>
+        <file>assets/icons/chevron-down.svg</file>
+        <file>assets/icons/chevron-up-dark.svg</file>
+        <file>assets/icons/chevron-down-dark.svg</file>
+        <file>assets/icons/chevron-up-pink.svg</file>
+        <file>assets/icons/chevron-down-pink.svg</file>
     </qresource>
 </RCC>
