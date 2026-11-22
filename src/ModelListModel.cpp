@@ -50,11 +50,6 @@ QVariant ModelListModel::data(const QModelIndex & index, int role) const {
             return QVariant::fromValue<qlonglong>(e.likes);
         }
         break;
-    case Qt::ToolTipRole:
-        if (index.column() == IdColumn) {
-            return e.id;
-        }
-        break;
     case Qt::TextAlignmentRole:
         switch (index.column()) {
         case TagColumn:
