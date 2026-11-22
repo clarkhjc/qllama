@@ -166,6 +166,8 @@ cmake --build build
 # 带图片自测（自动选择支持多模态的模型并预填 mmproj）：
 ./build/qllama.app/Contents/MacOS/qllama --self-test "这张图片里有什么？" --image <图片路径>
 # 退出码 0 = 通过；截图输出到系统临时目录（qllama_selftest_*.png）
+# Markdown 排版预览（固定示例，无需模型）：
+./build/qllama.app/Contents/MacOS/qllama --markdown-screenshot
 ```
 
 ## 上下文长度参考

@@ -59,12 +59,13 @@ QString inlineFormat(QString s) {
         return QStringLiteral("<i>%1</i>").arg(escape(m.captured(1)));
     });
 
-    // 5. 恢复行内代码（主题色）
+    // 5. 恢复行内代码（主题色，胶囊样式）
     const ThemePalette & t = Theme::palette();
     for (int i = 0; i < codePieces.size(); i++) {
         s.replace(QStringLiteral("\x01%1\x02").arg(i),
                   QStringLiteral("<code style=\"background:%1;color:%2;"
-                                 "padding:1px 5px;border-radius:4px;font-family:Menlo,monospace;\">%3</code>")
+                                 "padding:2px 6px;border-radius:5px;font-size:13px;"
+                                 "font-family:Menlo,monospace;\">%3</code>")
                       .arg(Theme::css(t.inlineCodeBg), Theme::css(t.inlineCodeText),
                            escape(codePieces[i])));
     }
@@ -148,64 +149,92 @@ QString Markdown::toHtml(const QString & md) {
             i++; // 跳过闭合 ```
             const QString labelBar = lang.isEmpty() ? QString()
                 : QStringLiteral(
-                      "<div style=\"background:%1;color:%2;font-family:Menlo,monospace;"
-                      "font-size:12px;padding:5px 12px;border-radius:10px 10px 0 0;\">%3</div>")
-                      .arg(Theme::css(t.codeHeaderBg), Theme::css(t.codeHeaderText), escape(lang));
+                      "<div style=\"background-color:%1;color:%2;font-family:Menlo,monospace;"
+                      "font-size:11px;padding:6px 14px;border-radius:12px 12px 0 0;\">"
+                      "<span style=\"color:%3;\">●</span> %4</div>")
+                      .arg(Theme::css(t.codeHeaderBg), Theme::css(t.codeHeaderText),
+                           Theme::css(t.heading), escape(lang));
+            const QString preRadius = lang.isEmpty()
+                                          ? QStringLiteral("12px")
+                                          : QStringLiteral("0 0 12px 12px");
             out << QStringLiteral(
-                       "<div style=\"background:%1;border-radius:10px;margin:8px 0;\">%2"
-                       "<pre style=\"background:transparent;color:%3;font-family:Menlo,monospace;"
-                       "font-size:13px;padding:8px 12px;margin:0;\">%4</pre></div>")
-                       .arg(Theme::css(t.codeBg), labelBar, Theme::css(t.codeText), escape(code));
+                       "<div style=\"margin:12px 0;\">%1"
+                       "<pre style=\"background-color:%2;color:%3;font-family:Menlo,monospace;"
+                       "font-size:14px;font-weight:500;padding:12px 14px;margin:0;"
+                       "border-radius:%4;\">%5</pre></div>")
+                       .arg(labelBar, Theme::css(t.codeBg), Theme::css(t.codeText),
+                            preRadius, escape(code));
             continue;
         }
 
-        // 表格：| 表头 | + 分隔行 + 数据行
+        // 表格：| 表头 | + 分隔行 + 数据行（表头着色 + 斑马纹）
         if (line.trimmed().startsWith('|') && i + 1 < lines.size() && isTableSeparator(lines[i + 1])) {
             const QStringList header = tableCells(line);
             i += 2; // 跳过表头与分隔行
             QStringList rows;
+            int rowIndex = 0;
             while (i < lines.size() && lines[i].trimmed().startsWith('|')) {
+                const QString rowBg = (rowIndex % 2 == 1)
+                                          ? QStringLiteral(" style=\"background-color:%1;\"")
+                                                .arg(Theme::css(t.tableAltBg))
+                                          : QString();
                 QString row = QStringLiteral("<tr>");
                 const QStringList cells = tableCells(lines[i]);
                 for (const QString & c : cells) {
-                    row += QStringLiteral("<td>%1</td>").arg(inlineFormat(c));
+                    row += QStringLiteral("<td%1>%2</td>").arg(rowBg, inlineFormat(c));
                 }
                 row += QStringLiteral("</tr>");
                 rows << row;
+                rowIndex++;
                 i++;
             }
             QString head = QStringLiteral("<tr>");
             for (const QString & c : header) {
-                head += QStringLiteral("<th bgcolor=\"%1\" align=\"left\">%2</th>")
+                head += QStringLiteral(
+                            "<th align=\"left\" style=\"background-color:%1;padding:8px 10px;"
+                            "font-weight:600;\">%2</th>")
                             .arg(Theme::css(t.tableHeaderBg), inlineFormat(c));
             }
             head += QStringLiteral("</tr>");
             out << QStringLiteral(
-                       "<table border=\"1\" cellspacing=\"0\" cellpadding=\"6\" width=\"100%\" "
-                       "style=\"border-color:%1;border-radius:8px;margin:6px 0;\">%2%3</table>")
+                       "<table border=\"1\" cellspacing=\"0\" cellpadding=\"8\" width=\"100%\" "
+                       "style=\"border-color:%1;border-radius:10px;margin:10px 0;\">%2%3</table>")
                        .arg(Theme::css(t.tableBorder), head, rows.join(""));
             continue;
         }
 
-        // 标题
+        // 标题：分级字号 + 前两级使用强调色
         const auto mH = reH.match(line);
         if (mH.hasMatch()) {
             const int level = mH.captured(1).size();
-            out << QStringLiteral("<h%1 style=\"margin:10px 0 4px 0;\">%2</h%1>")
+            static const int sizes[] = {0, 24, 20, 17, 15};
+            const int size = sizes[qBound(1, level, 4)];
+            const QColor color = level <= 2 ? t.heading : t.textPrimary;
+            out << QStringLiteral(
+                       "<h%1 style=\"font-size:%2px;font-weight:700;color:%3;"
+                       "margin:%4px 0 %5px 0;\">%6</h%1>")
                        .arg(level)
+                       .arg(size)
+                       .arg(Theme::css(color))
+                       .arg(level == 1 ? 16 : 12)
+                       .arg(level == 1 ? 10 : 6)
                        .arg(inlineFormat(mH.captured(2)));
             i++;
             continue;
         }
 
-        // 分隔线
+        // 分隔线：细线表格实现（QTextDocument 对 hr 样式支持有限）
         if (reHr.match(line).hasMatch()) {
-            out << QStringLiteral("<hr>");
+            out << QStringLiteral(
+                       "<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" "
+                       "style=\"margin:14px 0;\"><tr><td style=\"border-top:1px solid %1;\">"
+                       "</td></tr></table>")
+                       .arg(Theme::css(t.tableBorder));
             i++;
             continue;
         }
 
-        // 引用（主题色左边框 + 半透明底）
+        // 引用：表格单元格承载背景与左侧强调条（QTextDocument 对 blockquote 样式支持有限）
         if (line.trimmed().startsWith('>')) {
             QStringList quote;
             while (i < lines.size() && lines[i].trimmed().startsWith('>')) {
@@ -213,14 +242,15 @@ QString Markdown::toHtml(const QString & md) {
                 i++;
             }
             out << QStringLiteral(
-                       "<blockquote style=\"background:%1;border-left:3px solid %2;"
-                       "margin:6px 0;padding:6px 12px;color:%3;\">%4</blockquote>")
+                       "<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" "
+                       "style=\"margin:10px 0;\"><tr><td style=\"background-color:%1;"
+                       "border-left:3px solid %2;padding:8px 14px;color:%3;\">%4</td></tr></table>")
                        .arg(Theme::css(t.quoteBg), Theme::css(t.quoteBorder),
                             Theme::css(t.quoteText), inlineFormat(quote.join("<br>")));
             continue;
         }
 
-        // 任务列表：- [ ] / - [x]
+        // 任务列表：- [ ] / - [x]（主题色勾选标记）
         if (reTask.match(line).hasMatch()) {
             QStringList items;
             while (i < lines.size()) {
@@ -234,11 +264,14 @@ QString Markdown::toHtml(const QString & md) {
                     content = QStringLiteral("<s style=\"color:%1;\">%2</s>")
                                   .arg(Theme::css(t.textMuted), content);
                 }
-                items << QStringLiteral("<li style=\"list-style-type:none;\">%1 %2</li>")
-                             .arg(done ? QStringLiteral("☑") : QStringLiteral("☐"), content);
+                const QString marker = done
+                    ? QStringLiteral("<span style=\"color:%1;\">✔</span>").arg(Theme::css(t.heading))
+                    : QStringLiteral("<span style=\"color:%1;\">☐</span>").arg(Theme::css(t.textMuted));
+                items << QStringLiteral("<li style=\"list-style-type:none;margin:3px 0;\">%1&nbsp;&nbsp;%2</li>")
+                             .arg(marker, content);
                 i++;
             }
-            out << QStringLiteral("<ul style=\"margin:4px 0;padding-left:6px;\">%1</ul>").arg(items.join(""));
+            out << QStringLiteral("<ul style=\"margin:6px 0;padding-left:8px;\">%1</ul>").arg(items.join(""));
             continue;
         }
 
@@ -252,10 +285,12 @@ QString Markdown::toHtml(const QString & md) {
                 if (!m.hasMatch()) {
                     break;
                 }
-                items << QStringLiteral("<li>%1</li>").arg(inlineFormat(m.captured(1)));
+                items << QStringLiteral("<li style=\"margin:3px 0;\">%1</li>")
+                             .arg(inlineFormat(m.captured(1)));
                 i++;
             }
-            out << (isOl ? QStringLiteral("<ol>") : QStringLiteral("<ul>"))
+            out << (isOl ? QStringLiteral("<ol style=\"margin:6px 0;padding-left:22px;\">")
+                         : QStringLiteral("<ul style=\"margin:6px 0;padding-left:22px;\">"))
                    + items.join("")
                    + (isOl ? QStringLiteral("</ol>") : QStringLiteral("</ul>"));
             continue;
@@ -282,7 +317,7 @@ QString Markdown::toHtml(const QString & md) {
             para << lines[i].trimmed();
             i++;
         }
-        out << QStringLiteral("<p style=\"margin:4px 0;\">%1</p>").arg(inlineFormat(para.join("<br>")));
+        out << QStringLiteral("<p style=\"margin:6px 0;\">%1</p>").arg(inlineFormat(para.join("<br>")));
     }
     return out.join("");
 }

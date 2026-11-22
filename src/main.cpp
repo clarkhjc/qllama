@@ -1,10 +1,16 @@
 #include "I18n.h"
 #include "Logging.h"
 #include "MainWindow.h"
+#include "Markdown.h"
 #include "Theme.h"
 
 #include <QApplication>
+#include <QDir>
 #include <QSettings>
+#include <QTextBrowser>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
 
 int main(int argc, char * argv[]) {
     QApplication app(argc, argv);
@@ -50,6 +56,72 @@ int main(int argc, char * argv[]) {
                 selfTestPrompt = args[i];
             }
         }
+    }
+
+    // --markdown-screenshot：用固定示例渲染 Markdown 并截图（无模型，便于视觉回归）
+    if (args.contains("--markdown-screenshot")) {
+        static const char * sample = R"MD(# Markdown 渲染示例
+
+这是一段普通段落，包含 **加粗文字**、*斜体文字*、`inline_code()` 和 [链接](https://example.com)。
+
+## 二级标题
+
+### 三级标题
+
+> 这是一段引用，用于强调重要信息。
+> 引用可以有第二行。
+
+- 无序列表项一
+- 无序列表项二
+
+1. 有序列表项一
+2. 有序列表项二
+
+| 功能 | 状态 | 说明 |
+|---|---|---|
+| 主题 | 完成 | 三套主题 |
+| 语言 | 完成 | 中英文 |
+| 表格 | 完成 | 斑马纹 |
+
+- [x] 已完成任务
+- [ ] 未完成任务
+
+---
+
+```python
+def greet(name: str) -> str:
+    """返回问候语"""
+    return f"Hello, {name}!"
+
+print(greet("qllama"))
+```
+)MD";
+        auto * win = new QWidget;
+        win->setObjectName("markdownPreview");
+        win->setWindowTitle("Markdown Preview");
+        auto * layout = new QVBoxLayout(win);
+        layout->setContentsMargins(16, 16, 16, 16);
+        auto * view = new QTextBrowser;
+        view->setObjectName("chatView");
+        view->setOpenExternalLinks(true);
+        const ThemePalette & p = Theme::palette();
+        const QString body = Markdown::toHtml(QString::fromUtf8(sample));
+        view->setHtml(QStringLiteral(
+            "<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"padding:0;\">"
+            "<table cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"background:%1;"
+            "border:1px solid %2;border-radius:4px 16px 16px 16px;padding:14px 18px;\">%3"
+            "</td></tr></table></td></tr></table>")
+            .arg(Theme::css(p.assistantBubble), Theme::css(p.assistantBubbleBorder), body));
+        layout->addWidget(view);
+        win->resize(860, 1200);
+        win->show();
+        QTimer::singleShot(400, win, [win] {
+            const QString path = QDir::temp().absoluteFilePath("qllama_markdown.png");
+            win->grab().save(path);
+            qInfo().noquote() << "MARKDOWN SCREENSHOT:" << path;
+            QCoreApplication::exit(0);
+        });
+        return app.exec();
     }
 
     MainWindow w(selfTest, selfTestPrompt, selfTestImage, args.contains("--config-screenshot"));

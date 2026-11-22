@@ -38,14 +38,17 @@ struct ThemePalette {
     QColor errorText;
 
     // Markdown 渲染
+    QColor heading;         // 一级/二级标题强调色
     QColor codeBg;
     QColor codeHeaderBg;
     QColor codeText;
     QColor codeHeaderText;
+    QColor codeBorder;
     QColor inlineCodeBg;
     QColor inlineCodeText;
     QColor tableHeaderBg;
     QColor tableBorder;
+    QColor tableAltBg;      // 表格斑马纹
     QColor quoteBg;
     QColor quoteBorder;
     QColor quoteText;

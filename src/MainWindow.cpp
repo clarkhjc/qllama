@@ -124,14 +124,15 @@ static QString assistantHeaderHtml(bool generating) {
              I18n::t("助手"));
 }
 
-// 助手消息气泡（Markdown HTML 外层）：左对齐，贴合内容宽度
+// 助手消息气泡（Markdown HTML 外层）：左对齐，贴合内容宽度。
+// 背景放在表格单元格上，保证块级元素的 margin 区域也被气泡背景覆盖
+// （放 div 上时暗色主题会出现一条条透明缝隙）。
 static QString assistantBubbleHtml(const QString & innerHtml) {
     const ThemePalette & t = Theme::palette();
     return QStringLiteral(
         "<table width=\"100%\" cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"padding:0;\">"
-        "<table cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"padding:0;\">"
-        "<div style=\"background:%1;border:1px solid %2;"
-        "border-radius:4px 16px 16px 16px;padding:10px 14px;\">%3</div>"
+        "<table cellspacing=\"0\" cellpadding=\"0\"><tr><td style=\"background:%1;border:1px solid %2;"
+        "border-radius:4px 16px 16px 16px;padding:12px 16px;\">%3"
         "</td></tr></table></td></tr></table>")
         .arg(Theme::css(t.assistantBubble), Theme::css(t.assistantBubbleBorder), innerHtml);
 }

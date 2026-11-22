@@ -28,7 +28,7 @@ ThemePalette makeLight() {
     p.assistantName    = QColor("#7c5bff");
     p.userBubble       = QColor(74, 125, 255, 235);
     p.userBubbleText   = QColor("#ffffff");
-    p.assistantBubble  = QColor(255, 255, 255, 184);
+    p.assistantBubble  = QColor("#fbfcff");
     p.assistantBubbleBorder = QColor(255, 255, 255, 242);
     p.avatarUser1      = QColor("#4a7dff");
     p.avatarUser2      = QColor("#6a5bff");
@@ -41,15 +41,18 @@ ThemePalette makeLight() {
 
     p.codeBg           = QColor("#1e1e2e");
     p.codeHeaderBg     = QColor("#2b2b40");
-    p.codeText         = QColor("#e8e8f0");
-    p.codeHeaderText   = QColor("#9a9ac0");
+    p.codeText         = QColor("#ffffff");
+    p.codeHeaderText   = QColor("#c8c8da");
+    p.codeBorder       = QColor(255, 255, 255, 26);
     p.inlineCodeBg     = QColor(91, 124, 255, 26);
     p.inlineCodeText   = QColor("#c04a7c");
     p.tableHeaderBg    = QColor("#e9ecf7");
     p.tableBorder      = QColor("#d8dbe8");
+    p.tableAltBg       = QColor(91, 124, 255, 14);
     p.quoteBg          = QColor(91, 124, 255, 26);
     p.quoteBorder      = QColor("#5b7cff");
     p.quoteText        = QColor("#5a5a70");
+    p.heading          = QColor("#5b7cff");
 
     p.dotIdle          = QColor("#9a9aa8");
     p.dotLoading       = QColor("#f5a623");
@@ -79,7 +82,7 @@ ThemePalette makeDark() {
     p.assistantName    = QColor("#b799ff");
     p.userBubble       = QColor(96, 132, 255, 235);
     p.userBubbleText   = QColor("#ffffff");
-    p.assistantBubble  = QColor(255, 255, 255, 20);
+    p.assistantBubble  = QColor("#30313f");
     p.assistantBubbleBorder = QColor(255, 255, 255, 36);
     p.avatarUser1      = QColor("#4a7dff");
     p.avatarUser2      = QColor("#6a5bff");
@@ -94,13 +97,16 @@ ThemePalette makeDark() {
     p.codeHeaderBg     = QColor("#1e1e2c");
     p.codeText         = QColor("#e4e4ee");
     p.codeHeaderText   = QColor("#8a8aa6");
+    p.codeBorder       = QColor(255, 255, 255, 22);
     p.inlineCodeBg     = QColor(143, 168, 255, 36);
     p.inlineCodeText   = QColor("#ff9ec4");
     p.tableHeaderBg    = QColor(255, 255, 255, 23);
     p.tableBorder      = QColor(255, 255, 255, 41);
+    p.tableAltBg       = QColor(255, 255, 255, 10);
     p.quoteBg          = QColor(111, 140, 255, 33);
     p.quoteBorder      = QColor("#6f8cff");
     p.quoteText        = QColor("#a6a6bc");
+    p.heading          = QColor("#8fa8ff");
 
     p.dotIdle          = QColor("#7c7c94");
     p.dotLoading       = QColor("#f5a623");
@@ -130,7 +136,7 @@ ThemePalette makePink() {
     p.assistantName    = QColor("#b25bd0");
     p.userBubble       = QColor(255, 111, 165, 235);
     p.userBubbleText   = QColor("#ffffff");
-    p.assistantBubble  = QColor(255, 255, 255, 191);
+    p.assistantBubble  = QColor("#fff9fc");
     p.assistantBubbleBorder = QColor(255, 255, 255, 242);
     p.avatarUser1      = QColor("#ff6fa5");
     p.avatarUser2      = QColor("#c86bff");
@@ -143,15 +149,18 @@ ThemePalette makePink() {
 
     p.codeBg           = QColor("#2e1f2a");
     p.codeHeaderBg     = QColor("#3a2836");
-    p.codeText         = QColor("#ffe8f2");
-    p.codeHeaderText   = QColor("#c9a3b8");
+    p.codeText         = QColor("#ffffff");
+    p.codeHeaderText   = QColor("#e8c0d4");
+    p.codeBorder       = QColor(255, 255, 255, 26);
     p.inlineCodeBg     = QColor(255, 111, 165, 36);
     p.inlineCodeText   = QColor("#c8447e");
     p.tableHeaderBg    = QColor("#ffe9f2");
     p.tableBorder      = QColor("#f3cfdd");
+    p.tableAltBg       = QColor(255, 111, 165, 14);
     p.quoteBg          = QColor(255, 111, 165, 26);
     p.quoteBorder      = QColor("#ff6fa5");
     p.quoteText        = QColor("#7a5a6a");
+    p.heading          = QColor("#e84a86");
 
     p.dotIdle          = QColor("#b08a9c");
     p.dotLoading       = QColor("#f5a623");

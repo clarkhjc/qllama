@@ -182,6 +182,8 @@ in the corresponding classes under `src/`:
 # With an image (auto-selects a multimodal model and pre-fills mmproj):
 ./build/qllama.app/Contents/MacOS/qllama --self-test "这张图片里有什么？" --image <image path>
 # Exit code 0 = passed; screenshots go to the system temp dir (qllama_selftest_*.png)
+# Markdown layout preview (fixed sample, no model):
+./build/qllama.app/Contents/MacOS/qllama --markdown-screenshot
 ```
 
 ## Context length reference
