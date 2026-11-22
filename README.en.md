@@ -2,127 +2,137 @@
 
 English | [中文](README.md)
 
-A local LLM chat client built with **Qt 6 Widgets** (macOS / Apple Silicon) that directly calls
-the **llama.cpp 0.9.0** C API (`llama.h`) and the common chat-template API
-(`common_chat_templates`), fully Metal-accelerated, streaming output, no cloud services required.
+A local LLM chat client built with **Qt 6 Widgets** (macOS / Apple Silicon) that talks directly
+to the **llama.cpp 0.9.0** C API (`llama.h`), the common chat-template API and the mtmd
+multimodal API. Metal accelerated, streaming, fully offline.
 
 ## Features
 
-- **Streaming chat**: real-time token-by-token refresh, Markdown rendering (headings / lists /
-  tables / task lists / dark code blocks with language labels / blockquotes / links)
-- **KV reuse for long conversations**: incremental KV reuse — each turn only decodes the new content
-- **Context management**: live usage in the status bar; when the context fills up, older messages
-  are omitted automatically (configurable), or compress early messages into a summary with one click
-- **Multimodal**: after loading an mmproj projector model, image Q&A is supported (up to 4 images)
-- **Model management**: fetch the latest models from Hugging Face, search, download GGUF files and
-  set one as the current model in a single click (auto-falls back to the hf-mirror.com mirror when
-  the official site is unreachable; customizable save directory, with progress bar)
-- **Three themes**: light / dark / pink, switchable in one click from the config dialog
-  (live preview, persisted), with all widget styles living in QSS
-- **Chinese & English UI**: switch between 中文 and English (live preview, persisted);
-  widgets, hints, status bar and chat records are retranslated together
-- **Glassmorphism**: gradient background + glass cards + gradient avatars/icons
-- **System monitor**: persistent CPU / memory / GPU usage plus context usage
-  (KV tokens / n_ctx capacity with percentage, color-coded, refreshed every 2 s)
-- **Config & file logging**: all app and llama.cpp logs go to `~/Library/Logs/qllama/qllama.log`
-  (auto-rotated), openable in one click from the config dialog
-- **GUI self-test**: `--self-test` end-to-end verification with no human interaction
-  (load model → two-turn conversation → screenshot → exit)
+- **Streaming Markdown chat**: token-by-token output; tiered headings, code cards with language
+  labels, zebra-striped tables, quotes, task lists, inline code and links, all theme-aware
+- **KV reuse for long chats**: each turn decodes only the new content instead of reprocessing history
+- **Context management**: live KV usage / capacity in the status bar; when the context fills up,
+  older messages are omitted automatically (configurable), or compress early messages into a
+  summary with one click
+- **Multimodal image Q&A**: send up to 4 images after loading an mmproj projector
+- **Model manager**: fetch the latest models from Hugging Face, search, download GGUF and set it as
+  current automatically; hover a row for its README summary; falls back to `hf-mirror.com`, up to
+  1000 models per fetch
+- **Three themes**: light / dark / pink, live preview and persisted; all widget styling lives in QSS
+- **Chinese & English UI**: live switching; widgets, hints, status bar and chat records retranslated
+- **System monitor**: persistent CPU / memory / GPU usage in the status bar (2 s, color-coded)
+- **File logging**: app and llama.cpp logs in `~/Library/Logs/qllama/qllama.log` (auto-rotated)
+- **One-command DMG**: `./pack.sh` builds, deploys dependencies, signs and packages the app
 
-## Architecture
-
-```
-┌──────────────────────────── UI thread ───────────────────────────
-│ MainWindow (chat UI, system monitor, model management)
-│   │ signals (QueuedConnection, cross-thread)
-│   ▼
-│ ChatWorker (worker thread, QObject + QThread)
-│   └── LlamaChat (pure C++ wrapper, no Qt dependency)
-│         ├── chat-template rendering  common_chat_templates_apply()
-│         ├── tokenize / decode        llama_tokenize / llama_decode
-│         └── sampling                 llama_sampler_chain_*
-└───────────────────────────────────────────────────────────────────
-```
-
-Key points:
-
-- **Inference on a worker thread**: `llama_decode` is a blocking call, so it runs inside
-  `ChatWorker` (`moveToThread`) — the UI thread never stalls; tokens stream to the UI
-  one by one through the `tokenReady` signal.
-- **Stop generation**: `stopGeneration` is connected with `Qt::DirectConnection` (the generation
-  loop blocks the worker thread's event queue, so queued signals would not arrive in time) and
-  only sets a `std::atomic_bool` — thread-safe.
-- **Incremental KV reuse for long conversations**: after each turn, the state text is rebuilt by
-  **the renderer itself** (full history including this turn's reply + an empty user placeholder,
-  rendered and then the placeholder part subtracted), so the last assistant message is rendered
-  in "history message" form — template behaviors such as thinking-block stripping and `| trim`
-  are guaranteed consistent by the renderer itself. The next turn's full render is guaranteed to
-  start with that text as a prefix; on a hit, only the new suffix is tokenized and decoded,
-  continuing right after the existing KV. Any mismatch (changing the system prompt, clearing the
-  conversation, toggling thinking mode) automatically falls back to full recomputation.
-- **Markdown rendering**: raw text streams during generation; once finished it is replaced with
-  the rendered output of `Markdown::toHtml` (a lightweight in-house converter with fully
-  HTML-escaped output), tolerant of half-finished Markdown after an early stop.
-- **Multimodal (images)**: in messages with images, the content carries `<__media__>` markers;
-  `mtmd_tokenize_from_parts` interleaves text/image tokens into chunks and
-  `mtmd_helper_eval_chunks` performs text decoding + image encoding/embedding in one step
-  (vision tokens auto-expanded, M-RoPE positions handled by the helper). When a model is
-  selected, `mmproj*.gguf` in the same directory is auto-detected and pre-filled.
-- **BOS handling**: consistent with the official `llama-simple-chat` — a BOS token is added
-  manually when the KV cache is empty (`llama_vocab_get_add_bos`), otherwise Gemma/Qwen degrade
-  into echo loops.
-- **Stop condition**: `llama_vocab_is_eog` (EOS / EOT and all other end-of-generation tokens).
-
-## Dependencies
+## Requirements
 
 | Dependency | Version | Notes |
 |---|---|---|
-| macOS | Apple Silicon | required for Metal acceleration (macOS only for now) |
-| Qt 6 (Widgets / Network) | ≥ 6.5 (developed with 6.12) | Homebrew `qt` |
-| llama.cpp | 0.9.0 (source + built shared libraries) | must be built with CMake first, producing `build/bin/*.dylib` |
+| macOS | Apple Silicon | Metal acceleration (macOS only for now) |
+| Qt 6 (Widgets / Network) | ≥ 6.5 (developed with 6.12) | Homebrew `qt`; `pack.sh` also needs `qtsvg` |
+| qtsvg | matching Qt | SVG icon rendering (`iconengines/libqsvgicon`) |
+| llama.cpp | 0.9.0 (source + built shared libraries) | build `build/bin/*.dylib` first |
 | CMake / Ninja | ≥ 3.21 | |
 
-> Note: this project is written against the llama.cpp 0.9.0 API (including the `tools/mtmd`
-> multimodal API). Other llama.cpp versions may have API differences; please stick to 0.9.0.
+> Written against the llama.cpp 0.9.0 API (including `tools/mtmd`); other versions may differ.
 
-## Building
+## Build & Run
 
 ```bash
 # 1. Build llama.cpp first (anywhere):
-#    cd <llama.cpp source dir> && cmake -B build && cmake --build build
+cd <llama.cpp source dir> && cmake -B build && cmake --build build
 
-# 2. Build qllama, with -DLLAMA_CPP_DIR pointing at the llama.cpp source directory:
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLAMA_CPP_DIR=<llama.cpp source dir>
+# 2. Build qllama:
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DLLAMA_CPP_DIR=<llama.cpp source dir>
 cmake --build build
+
+# 3. Run:
+open build/qllama.app
 ```
 
 Artifacts:
 
-- `build/qllama.app` — GUI client (`open build/qllama.app`)
-- `build/qllama_smoke` — headless smoke test; verify the llama.cpp pipeline before opening the GUI
+- `build/qllama.app` — GUI client
+- `build/qllama_smoke` — headless smoke test for the llama.cpp pipeline
 
-## UI themes (light / dark / pink)
+## Package as DMG
 
-- **Switching**: three buttons under 「全量配置 → 性能与界面 → 主题」 in the config dialog;
-  clicking previews the theme immediately, 「确定」(OK) saves it to QSettings (`ui/theme`) for
-  the next launch, 「取消」(Cancel) restores the previous theme
-- **Style files**: `assets/themes/light.qss`, `dark.qss`, `pink.qss` — every widget style
-  (window gradient, glass cards, buttons, inputs, tabs, tables, scrollbars, progress bar,
-  status dot, theme buttons, …) is defined there, compiled into the binary via `resources.qrc`
-- **Palette**: what QSS cannot reach (chat HTML, Markdown code blocks/tables/quotes, avatar
-  gradients, monochrome SVG icon tinting, system-monitor colors) comes from the `ThemePalette`
-  in `src/common/Theme.h/.cpp`, kept in sync with the matching QSS
-- **Icons**: `assets/icons/` (Feather icons, MIT license); in the dark theme non-white icons are
-  tinted by `Theme::icon()`, while the `-white.svg` variants stay as-is for gradient buttons/avatars
-- **Debug**: the `QLLAMA_THEME=dark` environment variable forces the startup theme
-  (useful for screenshots/regression)
+```bash
+./pack.sh               # build + package + runtime verification (window appears briefly)
+./pack.sh --no-build    # skip the build
+./pack.sh --no-verify   # skip the launch check
+```
 
-## Qt Creator / Designer development
+The script deploys Qt/SVG dependencies and `qt.conf`, strips unused plugins and machine-specific
+paths, re-signs ad-hoc and produces `dist/qllama-<version>-<arch>.dmg` (drag into Applications).
+The bundle is ad-hoc signed; if Gatekeeper blocks the first launch, allow it under
+System Settings → Privacy & Security.
 
-UI layouts live in `ui/mainwindow.ui`, `ui/configdialog.ui` and `ui/modelmanagedialog.ui` —
-double-click them in **Qt Creator** to open the visual Designer; CMake's AUTOUIC generates the
-`ui_*.h` headers. Widget interaction, streaming rendering, threading and other dynamic logic live
-in the corresponding classes under `src/`:
+## Usage
+
+1. Pick a GGUF model and click 「加载模型」(Load Model); or download one from Hugging Face via
+   「管理模型」(Manage Models);
+2. Adjust parameters in 「配置…」(Settings):
+
+**Basic**
+
+| Parameter | Default | Description |
+|---|---|---|
+| Temperature | 0.70 | higher = more diverse; 0 = deterministic |
+| Context | 4096 | KV cache length (tokens), applied on model load |
+| Max reply length | 2048 | max tokens per reply |
+| System prompt | empty | injected as a system message every turn |
+
+**Advanced**
+
+| Parameter | Default | Description |
+|---|---|---|
+| Theme | light | light / dark / pink, live preview and persisted |
+| Language | 中文 | 中文 / English, live preview and persisted |
+| Projector | empty | mmproj*.gguf; enables images (auto-detected when choosing a model) |
+| Top-K | 40 | candidate cut-off; 0 = disabled |
+| Top-P | 0.95 | nucleus sampling cumulative probability |
+| Min-P | 0.05 | Minimum-P sampling filter ratio |
+| GPU layers | -1 (all) | -1 = all on Metal; 0 = CPU only; applied on load |
+| Batch size | 512 | batch per `llama_decode` |
+| Threads | 0 (auto) | CPU threads |
+| Random seed | random | fixed seed makes output reproducible |
+| Auto-omit older messages | on | keep system prompt + recent messages; when off, a context-full error is shown |
+| Thinking mode | off | Qwen3 and similar output reasoning first; toggling forces full recompute |
+
+3. `Enter` sends, `Shift+Enter` inserts a newline; stop while generating; add up to 4 images;
+4. Logs: `~/Library/Logs/qllama/qllama.log` (rotated beyond 5 MB), openable from Settings.
+
+## Architecture
+
+```
+UI thread: MainWindow ──signals (QueuedConnection)──► ChatWorker (worker thread)
+                                                          └── LlamaChat (pure C++, no Qt)
+                                                              ├─ common_chat_templates_apply
+                                                              ├─ llama_tokenize / llama_decode
+                                                              └─ llama_sampler_chain_*
+```
+
+- **Inference on a worker thread**: `llama_decode` blocks; the UI never stalls, tokens stream
+  back through signals
+- **Stop generation**: `stopGeneration` uses `DirectConnection` and only sets an atomic flag
+  (the generation loop blocks the worker's event queue, so queued signals would arrive too late)
+- **KV reuse**: after each turn the state text is rebuilt by the renderer itself (full history +
+  an empty user placeholder, minus the placeholder), so the last assistant message is rendered as
+  a history message and the next full render always starts with it as a prefix. On a match only
+  the new suffix is decoded; any mismatch falls back to a full recompute
+- **Context management**: oldest turns are trimmed against a token budget (`n_ctx − reply reserve`);
+  generation stops before the KV limit; summary compression keeps the last two turns and injects a
+  local-model summary as a system message
+- **Multimodal**: `<__media__>` markers are tokenized by `mtmd_tokenize_from_parts` and evaluated
+  by `mtmd_helper_eval_chunks` (text decoding + image embedding, M-RoPE handled by the helper)
+- **Markdown**: raw text while streaming, replaced by `Markdown::toHtml` when finished, tolerant
+  of half-finished Markdown after an early stop
+- **BOS / stop**: manually add BOS when the KV is empty (otherwise Gemma/Qwen echo-loop);
+  `llama_vocab_is_eog` determines the end of generation
+
+## Source layout
 
 ```
 src/
@@ -133,93 +143,51 @@ src/
   system/   system monitor (SysMonitor)
 ```
 
+UI layouts live in `ui/*.ui` and open directly in **Qt Creator** Designer; CMake AUTOUIC generates
+`ui_*.h`. Cross-directory includes use the `src/` root prefix (e.g. `ui/MainWindow.h`).
+
 | .ui file | Generated class | Source code |
 |---|---|---|
 | ui/mainwindow.ui | `Ui::MainWindow` | src/ui/MainWindow.h/.cpp |
 | ui/configdialog.ui | `Ui::ConfigDialog` | src/ui/ConfigDialog.h/.cpp |
 | ui/modelmanagedialog.ui | `Ui::ModelManageDialog` | src/ui/ModelManageDialog.h/.cpp |
 
-## Usage
-
-1. Launch the app, pick a GGUF model file and click 「加载模型」(Load Model); or use
-   「管理模型」(Manage Models) to download a GGUF from Hugging Face directly and have it set as
-   the current model automatically;
-2. Click 「配置…」(Config...) to open the settings dialog. Parameters come in two tiers:
-
-**Basic config** (common parameters):
-
-| Parameter | Default | Description |
-|---|---|---|
-| 温度 Temperature | 0.70 | higher = more diverse; 0 = deterministic output |
-| 上下文 Context | 4096 | KV cache size (tokens); takes effect when the model is loaded |
-| 最大回复长度 Max reply length | 2048 | max tokens generated per reply |
-| 系统提示词 System prompt | empty | optional; a system message injected at the start of every conversation |
-
-**Full config** (advanced parameters):
-
-| Parameter | Default | Description |
-|---|---|---|
-| 主题 Theme | light | light / dark / pink; clicking previews immediately, 「确定」(OK) persists it |
-| 语言 Language | 中文 | 中文 / English; clicking previews immediately, 「确定」(OK) persists it |
-| 投影模型 Projector model | empty | multimodal projector mmproj*.gguf; once loaded, 「添加图片」(Add Image) lets you send images (auto-detected when selecting a model) |
-| Top-K | 40 | candidate token cutoff; 0 = disabled |
-| Top-P | 0.95 | nucleus sampling cumulative probability threshold |
-| Min-P | 0.05 | Minimum-P sampling filter ratio |
-| GPU layers | -1 (all) | -1 = all layers Metal-accelerated; 0 = CPU only; takes effect when the model is loaded |
-| Batch size | 512 | batch size per `llama_decode` call; larger = faster prompt processing but more memory |
-| Threads | 0 (auto) | CPU thread count |
-| Random seed | random | a fixed seed makes output reproducible |
-| Auto-omit older messages | on | Keep the system prompt and recent messages, dropping the oldest turn; when off, a context-full error is shown |
-| Thinking mode | off | Qwen3 and other thinking-capable models output their reasoning before answering; toggling forces a full context recomputation on the next turn |
-
-3. In the input box, `Enter` sends and `Shift+Enter` inserts a newline; click 「停止」(Stop) while
-   generating; assistant replies are rendered as Markdown; click 「添加图片」(Add Image) to attach
-   images (up to 4; click a thumbnail to remove it) sent with the next message;
-4. Logs: complete app + llama.cpp logs are written to `~/Library/Logs/qllama/qllama.log`
-   (auto-rotated beyond 5 MB); 「打开日志」(Open Logs) in the config dialog reveals it in Finder;
-5. Smoke test (multi-turn conversation, optionally with images):
+## Self-test & debugging
 
 ```bash
-./build/qllama_smoke <model path> "你好" "你刚才说了什么？"
-# Multimodal (image sent with the first turn):
-./build/qllama_smoke <model path> "这张图片里有什么？" \
-    --mmproj <mmproj path> --image <image path>
-```
-
-6. GUI self-test (end-to-end verification with no human interaction: auto-load model →
-   two-turn conversation → screenshot → exit):
-
-```bash
-./build/qllama.app/Contents/MacOS/qllama --self-test "请用 Markdown 回复：一个标题、一个列表和一段代码"
-# With an image (auto-selects a multimodal model and pre-fills mmproj):
+# Full GUI self-test (load model → two turns → screenshots → exit; 0 = passed)
+./build/qllama.app/Contents/MacOS/qllama --self-test "请用 Markdown 回复：一个标题、一个列表"
+# With an image (auto-selects a multimodal model and pre-fills mmproj)
 ./build/qllama.app/Contents/MacOS/qllama --self-test "这张图片里有什么？" --image <image path>
-# Exit code 0 = passed; screenshots go to the system temp dir (qllama_selftest_*.png)
-# Markdown layout preview (fixed sample, no model):
+# Config dialog screenshot / Markdown preview (no model required)
+./build/qllama.app/Contents/MacOS/qllama --config-screenshot
 ./build/qllama.app/Contents/MacOS/qllama --markdown-screenshot
+
+# Headless smoke test (multi-turn, optional image)
+./build/qllama_smoke <model path> "你好" "你刚才说了什么？"
+./build/qllama_smoke <model path> "这张图片里有什么？" --mmproj <mmproj> --image <image>
 ```
+
+Environment variables: `QLLAMA_THEME=dark` (force theme), `QLLAMA_LANG=en` (force language),
+`QLLAMA_DEBUG_PROMPT=1` (print prompts and KV-reuse mismatch points).
 
 ## Context length reference
 
-Measured on an 8 GB Apple Silicon device with gemma-3-4b (Q4_K_M), as a reference when choosing
-the 「上下文」(Context) parameter (other models / memory configs will differ):
+Measured on an 8 GB Apple Silicon device with gemma-3-4b (Q4_K_M):
 
 | n_ctx | Result |
 |---|---|
-| 4096 / 8192 / 16384 | ✓ stable (deep-fill of 8192 tokens + generation OK at 16384, ~12–14 tok/s) |
+| 4096 / 8192 / 16384 | ✓ stable (16384: 8192-token fill + generation OK, ~12–14 tok/s) |
 | 20480 and above | ✗ Metal OOM during decode (kIOGPU OutOfMemory) |
-| 131072 (training max) | ✗ initializes only (KV virtual allocation of 17.4 GB appears to succeed); decode inevitably OOMs |
+| 131072 (training max) | ✗ initializes only; decode always OOMs |
 
-Reason: under gemma-3-4b's SWA (sliding-window attention) architecture, llama.cpp still allocates
-KV for all 34 layers at the full n_ctx (~17.4 GB at 131072), and physical memory cannot support
-the decode compute graph. The UI's 「上下文」 cap is set to 16384 accordingly
-(adjustable in `ui/configdialog.ui`).
+Reason: with gemma-3-4b's SWA architecture llama.cpp still allocates KV for every layer at the full
+n_ctx (~17.4 GB at 131072), which exceeds physical memory. The UI's Context cap is 16384 accordingly.
 
-## Known limitations / roadmap
+## Known limitations
 
-- Long conversations exceeding n_ctx are not auto-windowed yet; a context-exceeded error is shown
-  (raise the 「上下文」 parameter instead);
-- Markdown rendering is a lightweight in-house subset (tables / task lists supported; image
-  syntax and syntax highlighting not implemented);
-- Distribution requires handling the `@rpath` dependencies (libllama, libggml-*, libllama-common,
-  openssl) — use `install_name_tool` or copy the dylibs into the app bundle and rewrite the rpaths;
-- macOS only (Metal acceleration dependency); porting to other platforms requires backend work.
+- Markdown is a lightweight in-house subset: image syntax and syntax highlighting are not supported;
+- Auto-trim drops older messages from the model context (still shown in the UI); use summary
+  compression to retain their gist;
+- macOS only (Metal dependency); other platforms require another backend;
+- The DMG is ad-hoc signed; the first launch may need manual approval.
