@@ -21,6 +21,16 @@
   </property>
   <layout class="QVBoxLayout" name="rootLayout">
    <item>
+    <widget class="QScrollArea" name="tabsScroll">
+     <property name="frameShape">
+      <enum>QFrame::Shape::NoFrame</enum>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+     </property>
     <widget class="QTabWidget" name="tabs">
      <property name="currentIndex">
       <number>1</number>
@@ -655,6 +665,7 @@
        </item>
       </layout>
      </widget>
+    </widget>
     </widget>
    </item>
    <item>

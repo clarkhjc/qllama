@@ -11,11 +11,20 @@
 #include <QIcon>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScreen>
 #include <QSpinBox>
 #include <QUrl>
 
 ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog(parent) {
     ui.setupUi(this); // 界面布局见 ui/configdialog.ui（Qt Designer 编辑）
+
+    // 标签页内容放入滚动区：内容高度超过屏幕时滚动，底部「取消/确定」始终可见
+    ui.tabsScroll->viewport()->setAutoFillBackground(false);
+    if (const QScreen * scr = screen()) {
+        const int maxH = qMax(420, scr->availableGeometry().height() - 140); // 预留标题栏/菜单栏/Dock
+        setMaximumHeight(maxH);
+        resize(width(), qMin(maxH, 700)); // 内容超出时由滚动区滚动
+    }
 
     // 输入框一键清除
     ui.mmprojEdit->setClearButtonEnabled(true);
