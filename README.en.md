@@ -20,8 +20,8 @@ the **llama.cpp 0.9.0** C API (`llama.h`) and the common chat-template API
 - **Chinese & English UI**: switch between 中文 and English (live preview, persisted);
   widgets, hints, status bar and chat records are retranslated together
 - **Glassmorphism**: gradient background + glass cards + gradient avatars/icons
-- **System monitor**: persistent CPU / memory / GPU usage in the status bar (color-coded,
-  refreshed every 2 seconds)
+- **System monitor**: persistent CPU / memory / GPU usage plus context usage
+  (KV tokens / n_ctx capacity with percentage, color-coded, refreshed every 2 s)
 - **Config & file logging**: all app and llama.cpp logs go to `~/Library/Logs/qllama/qllama.log`
   (auto-rotated), openable in one click from the config dialog
 - **GUI self-test**: `--self-test` end-to-end verification with no human interaction

@@ -43,6 +43,8 @@ struct ChatResult {
     int32_t prompt_tokens    = 0;
     int32_t generated_tokens = 0;
     double  tokens_per_sec   = 0.0;
+    int32_t context_tokens   = 0; // 生成结束时的 KV 长度
+    int32_t context_capacity = 0; // n_ctx 容量
 };
 
 // llama.cpp 的薄封装：模型加载 + 聊天模板渲染 + 采样生成 + 多模态（图片）。
@@ -61,16 +63,22 @@ public:
     // 模型类型描述，如 "gemma3 4B Q4_K - Medium"
     std::string modelDesc() const;
 
+    // 上下文使用情况（KV token 数 / n_ctx 容量）
+    size_t contextTokens() const { return m_kvSize; }
+    size_t contextCapacity() const { return m_nCtx; }
+
     // 根据历史消息生成回复；每产生一段文本就回调一次 on_piece；
     // stopFlag 置位时在当前 token 边界尽快中止。
     // 最后一条消息可携带图片（imagePaths），图片按顺序对应 content 中的 <__media__> 标记。
+    // onContext(used, capacity) 在提示词解码后、生成过程中（每 8 个 token）与结束时回调。
     // 返回 false 时 err 为错误描述。
     bool chat(const std::vector<ChatMessage> & history,
               const ChatOptions & opts,
               const std::function<void(const std::string &)> & onPiece,
               const std::atomic_bool & stopFlag,
               ChatResult & result,
-              std::string & err);
+              std::string & err,
+              const std::function<void(size_t, size_t)> & onContext = {});
 
 private:
     // skipEmpty=false 时渲染空消息（用于状态文本的对齐渲染）
@@ -87,6 +95,7 @@ private:
     common_chat_templates_ptr  m_tmpls;
     mtmd::context_ptr          m_mtmd;
     uint32_t                   m_nBatch = 512; // llama_n_batch() 的实际值
+    uint32_t                   m_nCtx   = 0;   // llama_n_ctx()（上下文容量）
 
     // 长对话增量复用：状态文本 = 完整历史（含最后一轮回复，assistant 以历史消息
     // 形式渲染）的渲染结果——下一轮的完整渲染必然以它为文本前缀；

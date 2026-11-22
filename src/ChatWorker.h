@@ -34,6 +34,7 @@ signals:
     void modelLoadFailed(const QString & err);
     void modelUnloaded();
     void tokenReady(const QString & piece);
+    void contextUpdated(int used, int capacity); // KV 用量 / n_ctx 容量
     void generationFinished(const QString & text, const ChatResult & result);
     void generationFailed(const QString & err);
 

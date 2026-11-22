@@ -26,7 +26,7 @@ QFrame#modelBar {
 }
 
 /* 系统监控信息（状态栏右侧常驻） */
-#monitorLabel {
+#monitorLabel, #contextLabel {
     color: #5a5a70;
     font-size: 12px;
     padding-right: 8px;

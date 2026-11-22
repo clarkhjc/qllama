@@ -71,6 +71,10 @@ const QHash<QString, QString> & zhToEn() {
         {QStringLiteral("系统级：CPU 利用率 · 内存占用率（活动监视器口径）· GPU 利用率"), QStringLiteral("System-wide: CPU usage · Memory usage (Activity Monitor) · GPU usage")},
         {QStringLiteral("CPU %1 · 内存 %2 · GPU %3"), QStringLiteral("CPU %1 · Memory %2 · GPU %3")},
         {QStringLiteral("CPU — · 内存 — · GPU —"), QStringLiteral("CPU — · Memory — · GPU —")},
+        {QStringLiteral("上下文 —"), QStringLiteral("Context —")},
+        {QStringLiteral("加载模型后显示上下文使用情况"), QStringLiteral("Context usage appears after a model is loaded")},
+        {QStringLiteral("上下文 %1 / %2 (%3%)"), QStringLiteral("Context %1 / %2 (%3%)")},
+        {QStringLiteral("上下文使用：已解码 %1 token / 容量 %2 token（%3%）。接近上限时请调大「上下文」或清空对话。"), QStringLiteral("Context usage: %1 decoded tokens / %2 capacity (%3%). Increase “Context” or clear the chat when nearing the limit.")},
 
         // —— 配置页 ——
         {QStringLiteral("配置"), QStringLiteral("Settings")},

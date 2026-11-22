@@ -193,6 +193,7 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     connect(m_worker, &ChatWorker::modelLoadFailed,    this, &MainWindow::onModelLoadFailed);
     connect(m_worker, &ChatWorker::modelUnloaded,      this, &MainWindow::onModelUnloaded);
     connect(m_worker, &ChatWorker::tokenReady,         this, &MainWindow::onTokenReady);
+    connect(m_worker, &ChatWorker::contextUpdated,     this, &MainWindow::updateContextLabel);
     connect(m_worker, &ChatWorker::generationFinished, this, &MainWindow::onGenerationFinished);
     connect(m_worker, &ChatWorker::generationFailed,   this, &MainWindow::onGenerationFailed);
 
@@ -220,6 +221,12 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
 
     // 模型状态指示灯（灰=未加载，黄=加载中，绿=已加载，红=失败；颜色在 QSS）
     setStatusDot(ui.statusDot, "idle");
+
+    // —— 上下文使用情况（状态栏，位于系统监控左侧） ——
+    m_contextLabel = new QLabel;
+    m_contextLabel->setObjectName("contextLabel");
+    statusBar()->addPermanentWidget(m_contextLabel);
+    updateContextLabel(0, 0);
 
     // —— 系统监控：CPU / 内存 / GPU（2 秒刷新，状态栏右侧常驻） ——
     m_monitorLabel = new QLabel;
@@ -490,6 +497,7 @@ void MainWindow::onClearChat() {
     m_history.clear();
     ui.chatView->clear();
     ui.chatView->append(welcomeHtml());
+    updateContextLabel(0, m_ctxCapacity); // 对话已清空，下次生成会全量重算
 }
 
 void MainWindow::onAddImages() {
@@ -796,12 +804,44 @@ void MainWindow::updateMonitorLabel() {
     m_monitorLabel->setToolTip(I18n::t("系统级：CPU 利用率 · 内存占用率（活动监视器口径）· GPU 利用率"));
 }
 
+// 状态栏上下文使用情况：已解码 token / n_ctx 容量（按占用率着色）
+void MainWindow::updateContextLabel(int used, int capacity) {
+    m_ctxUsed = used;
+    m_ctxCapacity = capacity;
+    if (!m_contextLabel) {
+        return;
+    }
+    if (capacity <= 0) {
+        m_contextLabel->setText(I18n::t("上下文 —"));
+        m_contextLabel->setToolTip(I18n::t("加载模型后显示上下文使用情况"));
+        return;
+    }
+    const double pct = 100.0 * used / capacity;
+    const ThemePalette & t = Theme::palette();
+    const QColor color = pct < 50.0 ? t.monitorOk : pct < 80.0 ? t.monitorWarn : t.monitorBad;
+    auto fmt = [](int n) {
+        return n >= 1000 ? QStringLiteral("%1K").arg(n / 1000.0, 0, 'f', 1)
+                         : QString::number(n);
+    };
+    m_contextLabel->setText(
+        QStringLiteral("<span style=\"color:%1;\">●</span> %2")
+            .arg(Theme::css(color),
+                 I18n::t("上下文 %1 / %2 (%3%)")
+                     .arg(fmt(used), fmt(capacity), QString::number(pct, 'f', 0))));
+    m_contextLabel->setToolTip(
+        I18n::t("上下文使用：已解码 %1 token / 容量 %2 token（%3%）。接近上限时请调大「上下文」或清空对话。")
+            .arg(used)
+            .arg(capacity)
+            .arg(pct, 0, 'f', 0));
+}
+
 // 切换界面语言：重译静态控件 + 动态文字 + 重建聊天记录
 void MainWindow::applyLanguage(const QString & code) {
     I18n::setLanguage(code);
     m_config.language = I18n::normalized(code);
     I18n::retranslateTree(this);
     updateMonitorLabel();
+    updateContextLabel(m_ctxUsed, m_ctxCapacity);
     if (m_generating) {
         statusBar()->showMessage(I18n::t("生成中……"));
     } else if (!m_modelLoaded) {

@@ -65,6 +65,7 @@ private:
     void scrollChatToBottom();    // 滚到聊天记录末尾（等文档布局完成后再滚）
     void applyLanguage(const QString & code); // 切换界面语言并重译界面
     void updateMonitorLabel();    // 按当前语言刷新状态栏监控文字
+    void updateContextLabel(int used, int capacity); // 状态栏上下文使用情况
     void selfTestAsk(const QString & prompt);
     void selfTestFinish(bool ok, const QString & reason);
 
@@ -81,6 +82,11 @@ private:
     double       m_lastCpu = -1;
     double       m_lastMem = -1;
     int          m_lastGpu = -2;
+
+    // 上下文使用情况（状态栏）
+    QLabel *     m_contextLabel = nullptr;
+    int          m_ctxUsed = 0;
+    int          m_ctxCapacity = 0;
 
     // 配置（配置页面「精简配置 / 全量配置」编辑）
     AppConfig m_config;

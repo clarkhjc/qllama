@@ -70,6 +70,7 @@ bool LlamaChat::load(const std::string & modelPath, const ChatOptions & opts, st
     }
 
     m_nBatch = llama_n_batch(m_ctx);
+    m_nCtx   = llama_n_ctx(m_ctx);
 
     // 多模态投影模型（可选）：加载后即可发送图片
     if (!opts.mmprojPath.empty()) {
@@ -109,6 +110,7 @@ void LlamaChat::unload() {
     m_mtmd.reset();
     m_tmpls.reset();
     m_kvSize = 0;
+    m_nCtx = 0;
     m_decodedText.clear();
     if (m_ctx) {
         llama_free(m_ctx);
@@ -193,7 +195,8 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
                      const std::function<void(const std::string &)> & onPiece,
                      const std::atomic_bool & stopFlag,
                      ChatResult & result,
-                     std::string & err) {
+                     std::string & err,
+                     const std::function<void(size_t, size_t)> & onContext) {
     if (!isLoaded()) {
         err = "模型尚未加载";
         return false;
@@ -422,6 +425,9 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
     }
 
     result.prompt_tokens = nDecoded;
+    if (onContext) {
+        onContext(m_kvSize, m_nCtx); // 提示词解码完成后的上下文占用
+    }
 
     // 采样链：top-k → top-p → min-p → 温度 → 分布采样
     llama_sampler * smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
@@ -477,6 +483,9 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
         }
         m_kvSize++;
         nGen++;
+        if (onContext && (nGen % 8 == 0)) {
+            onContext(m_kvSize, m_nCtx); // 生成期间每 8 个 token 更新一次
+        }
     }
 
     llama_sampler_free(smpl);
@@ -512,5 +521,10 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
     const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     result.generated_tokens = nGen;
     result.tokens_per_sec   = secs > 0.0 ? (double) nGen / secs : 0.0;
+    result.context_tokens   = (int32_t) m_kvSize;
+    result.context_capacity = (int32_t) m_nCtx;
+    if (onContext) {
+        onContext(m_kvSize, m_nCtx);
+    }
     return true;
 }
