@@ -66,6 +66,8 @@ add_executable(qllama MACOSX_BUNDLE
     src/ConfigDialog.h
     src/ChatWorker.cpp
     src/ChatWorker.h
+    src/I18n.cpp
+    src/I18n.h
     src/LlamaChat.h
     src/Logging.cpp
     src/Logging.h

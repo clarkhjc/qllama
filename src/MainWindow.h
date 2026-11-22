@@ -63,6 +63,8 @@ private:
     void refreshIcons();          // 按当前主题重设工具栏图标
     void rebuildChatView();       // 切换主题后按新配色重建聊天记录
     void scrollChatToBottom();    // 滚到聊天记录末尾（等文档布局完成后再滚）
+    void applyLanguage(const QString & code); // 切换界面语言并重译界面
+    void updateMonitorLabel();    // 按当前语言刷新状态栏监控文字
     void selfTestAsk(const QString & prompt);
     void selfTestFinish(bool ok, const QString & reason);
 
@@ -76,6 +78,9 @@ private:
     // 系统监控（CPU / 内存 / GPU）
     SysMonitor * m_monitor = nullptr;
     QLabel *     m_monitorLabel = nullptr; // 状态栏右侧常驻
+    double       m_lastCpu = -1;
+    double       m_lastMem = -1;
+    int          m_lastGpu = -2;
 
     // 配置（配置页面「精简配置 / 全量配置」编辑）
     AppConfig m_config;

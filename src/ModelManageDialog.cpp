@@ -1,4 +1,5 @@
 #include "ModelManageDialog.h"
+#include "I18n.h"
 #include "ModelListModel.h"
 #include "Theme.h"
 
@@ -183,6 +184,8 @@ ModelManageDialog::ModelManageDialog(const AppConfig & config, QWidget * parent)
             startDownload(testId, testFile);
         });
     }
+
+    I18n::retranslateTree(this); // .ui 静态文字按当前语言翻译
 }
 
 QString ModelManageDialog::apiHost(bool mirror) const {
@@ -193,7 +196,7 @@ QString ModelManageDialog::apiHost(bool mirror) const {
 void ModelManageDialog::closeEvent(QCloseEvent * event) {
     if (m_downloading) {
         event->ignore();
-        ui.statusLabel->setText("正在下载，请等待完成或取消……");
+        ui.statusLabel->setText(I18n::t("正在下载，请等待完成或取消……"));
         return;
     }
     QDialog::closeEvent(event);
@@ -236,8 +239,8 @@ void ModelManageDialog::fetchModels(bool useMirror) {
     }
     url.setQuery(query);
 
-    ui.statusLabel->setText(useMirror ? "官方站不可达，正在通过镜像 hf-mirror.com 拉取…"
-                                      : "正在从 Hugging Face 拉取最新模型…");
+    ui.statusLabel->setText(useMirror ? I18n::t("官方站不可达，正在通过镜像 hf-mirror.com 拉取…")
+                                      : I18n::t("正在从 Hugging Face 拉取最新模型…"));
     ui.refreshBtn->setEnabled(false);
 
     QNetworkRequest req(url);
@@ -257,7 +260,7 @@ void ModelManageDialog::handleModelsReply(QNetworkReply * reply, bool wasMirror)
             fetchModels(true); // 官方站失败（本机常见），自动回退镜像
             return;
         }
-        ui.statusLabel->setText("拉取失败：" + reply->errorString());
+        ui.statusLabel->setText(I18n::t("拉取失败：%1").arg(reply->errorString()));
         return;
     }
 
@@ -265,7 +268,7 @@ void ModelManageDialog::handleModelsReply(QNetworkReply * reply, bool wasMirror)
     QJsonParseError parseErr;
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseErr);
     if (parseErr.error != QJsonParseError::NoError || !doc.isArray()) {
-        ui.statusLabel->setText("数据解析失败");
+        ui.statusLabel->setText(I18n::t("数据解析失败"));
         return;
     }
 
@@ -312,9 +315,9 @@ void ModelManageDialog::handleModelsReply(QNetworkReply * reply, bool wasMirror)
         });
     }
 
-    ui.statusLabel->setText(QStringLiteral("已拉取 %1 条模型（按最近更新排序）%2")
+    ui.statusLabel->setText(I18n::t("已拉取 %1 条模型（按最近更新排序）%2")
                                 .arg(arr.size())
-                                .arg(wasMirror ? QStringLiteral(" · 经镜像 hf-mirror.com") : QString()));
+                                .arg(wasMirror ? I18n::t(" · 经镜像 hf-mirror.com") : QString()));
 
     // 调试：QLLAMA_DUMP_GEOMETRY=1 时输出前几条模型
     if (qEnvironmentVariableIsSet("QLLAMA_DUMP_GEOMETRY")) {
@@ -336,7 +339,7 @@ void ModelManageDialog::onDownloadGguf() {
 void ModelManageDialog::fetchTree(bool useMirror) {
     const QString host = apiHost(useMirror);
     QUrl url(host + "/api/models/" + m_selectedId + "/tree/main");
-    ui.statusLabel->setText("正在查询仓库文件列表…");
+    ui.statusLabel->setText(I18n::t("正在查询仓库文件列表…"));
     setBusy(true);
 
     QNetworkRequest req(url);
@@ -356,7 +359,7 @@ void ModelManageDialog::handleTreeReply(QNetworkReply * reply, bool wasMirror) {
             fetchTree(true); // 回退镜像
             return;
         }
-        ui.statusLabel->setText("查询文件列表失败：" + reply->errorString());
+        ui.statusLabel->setText(I18n::t("查询文件列表失败：%1").arg(reply->errorString()));
         return;
     }
 
@@ -364,7 +367,7 @@ void ModelManageDialog::handleTreeReply(QNetworkReply * reply, bool wasMirror) {
     QJsonParseError parseErr;
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseErr);
     if (parseErr.error != QJsonParseError::NoError || !doc.isArray()) {
-        ui.statusLabel->setText("文件列表解析失败");
+        ui.statusLabel->setText(I18n::t("文件列表解析失败"));
         return;
     }
 
@@ -387,7 +390,7 @@ void ModelManageDialog::handleTreeReply(QNetworkReply * reply, bool wasMirror) {
     });
 
     if (ggufs.isEmpty()) {
-        ui.statusLabel->setText("该仓库没有 GGUF 文件（试试搜索 gguf 找量化仓库）");
+        ui.statusLabel->setText(I18n::t("该仓库没有 GGUF 文件（试试搜索 gguf 找量化仓库）"));
         return;
     }
 
@@ -403,7 +406,7 @@ void ModelManageDialog::handleTreeReply(QNetworkReply * reply, bool wasMirror) {
         choices << QStringLiteral("%1  （%2）").arg(ggufs[i].path, formatBytes(ggufs[i].size));
     }
     bool ok = false;
-    const QString choice = QInputDialog::getItem(this, "选择要下载的 GGUF 文件",
+    const QString choice = QInputDialog::getItem(this, I18n::t("选择要下载的 GGUF 文件"),
         m_selectedId, choices, 0, false, &ok);
     if (!ok || choice.isEmpty()) {
         return;
@@ -417,7 +420,7 @@ void ModelManageDialog::handleTreeReply(QNetworkReply * reply, bool wasMirror) {
 
 // 选择保存目录
 void ModelManageDialog::browseSaveDir() {
-    const QString dir = QFileDialog::getExistingDirectory(this, "选择模型保存目录",
+    const QString dir = QFileDialog::getExistingDirectory(this, I18n::t("选择模型保存目录"),
         ui.saveDirEdit->text().isEmpty() ? QDir::homePath() : ui.saveDirEdit->text());
     if (!dir.isEmpty()) {
         ui.saveDirEdit->setText(dir);
@@ -434,7 +437,7 @@ void ModelManageDialog::startDownload(const QString & modelId, const QString & f
     }
     const QString targetDir = modelsDir.filePath(repoName);
     if (!modelsDir.mkpath(repoName)) {
-        ui.statusLabel->setText("无法创建目录：" + targetDir);
+        ui.statusLabel->setText(I18n::t("无法创建目录：%1").arg(targetDir));
         return;
     }
     const QString fileName = QFileInfo(filePath).fileName();
@@ -446,8 +449,9 @@ void ModelManageDialog::startDownload(const QString & modelId, const QString & f
     }
 
     if (QFileInfo::exists(localPath) && !forceOverwrite) {
-        const auto answer = QMessageBox::question(this, "文件已存在",
-            localPath + "\n已存在，是否覆盖？", QMessageBox::Yes | QMessageBox::No);
+        const auto answer = QMessageBox::question(this, I18n::t("文件已存在"),
+            I18n::t("模型文件已存在：\n%1\n\n是否覆盖？").arg(localPath),
+            QMessageBox::Yes | QMessageBox::No);
         if (answer != QMessageBox::Yes) {
             return;
         }
@@ -460,7 +464,7 @@ void ModelManageDialog::startDownload(const QString & modelId, const QString & f
 
     m_downloadFile.setFileName(localPath);
     if (!m_downloadFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        ui.statusLabel->setText("无法写入文件：" + localPath);
+        ui.statusLabel->setText(I18n::t("无法写入文件：%1").arg(localPath));
         return;
     }
 
@@ -469,8 +473,8 @@ void ModelManageDialog::startDownload(const QString & modelId, const QString & f
     ui.progressBar->setVisible(true);
     ui.progressBar->setRange(0, 100);
     ui.progressBar->setValue(0);
-    ui.statusLabel->setText(QStringLiteral("开始下载：%1%2").arg(
-        fileName, useMirror ? QStringLiteral("（经镜像）") : QString()));
+    ui.statusLabel->setText(I18n::t("开始下载：%1%2").arg(
+        fileName, useMirror ? I18n::t("（经镜像）") : QString()));
 
     QNetworkRequest req(url);
     // 30 秒无数据传输即判失败（正常下载数据持续流动，不会误触；
@@ -485,7 +489,7 @@ void ModelManageDialog::startDownload(const QString & modelId, const QString & f
             ui.progressBar->setRange(0, 1000);
             ui.progressBar->setValue((int) (received * 1000 / total));
         }
-        ui.statusLabel->setText(QStringLiteral("下载中 %1 / %2 · %3")
+        ui.statusLabel->setText(I18n::t("下载中 %1 / %2 · %3")
                                     .arg(formatBytes(received), formatBytes(total), fileName));
     });
     connect(reply, &QNetworkReply::finished, this, [this, reply, modelId, filePath, useMirror, localPath] {
@@ -498,21 +502,21 @@ void ModelManageDialog::startDownload(const QString & modelId, const QString & f
                 // 官方站失败（本机常见），清掉残片改用镜像重试
                 QFile::remove(localPath);
                 reply->deleteLater();
-                ui.statusLabel->setText("官方站不可达，改用镜像 hf-mirror.com 重试…");
+                ui.statusLabel->setText(I18n::t("官方站不可达，改用镜像 hf-mirror.com 重试…"));
                 startDownload(modelId, filePath, true, true);
                 return;
             }
             m_downloading = false;
             setBusy(false);
             ui.progressBar->setVisible(false);
-            ui.statusLabel->setText(QStringLiteral("下载失败：%1（已删除不完整文件）")
+            ui.statusLabel->setText(I18n::t("下载失败：%1（已删除不完整文件）")
                                         .arg(reply->errorString()));
             QFile::remove(localPath);
         } else {
             m_downloading = false;
             setBusy(false);
             ui.progressBar->setVisible(false);
-            ui.statusLabel->setText("下载完成：" + localPath);
+            ui.statusLabel->setText(I18n::t("下载完成：%1").arg(localPath));
             qInfo().noquote() << "HF 下载完成:" << localPath;
             emit modelDownloaded(localPath);
             accept(); // 完成后关闭页面，回到主窗口加载模型
@@ -537,7 +541,7 @@ void ModelManageDialog::onOpenPage() {
 void ModelManageDialog::onCopyId() {
     if (!m_selectedId.isEmpty()) {
         QApplication::clipboard()->setText(m_selectedId);
-        ui.statusLabel->setText("已复制模型 ID：" + m_selectedId);
+        ui.statusLabel->setText(I18n::t("已复制模型 ID：%1").arg(m_selectedId));
     }
 }
 
@@ -563,14 +567,13 @@ QString ModelManageDialog::hoverBaseHtml(const QModelIndex & index) const {
     auto cell = [&index, row](int column) {
         return index.sibling(row, column).data().toString();
     };
-    return QStringLiteral(
-               "<b>%1</b><br><span style=\"color:#b0b0c0;\">"
-               "类型 %2 · 下载 %3 · 点赞 %4 · 更新 %5</span>")
-        .arg(cell(ModelListModel::IdColumn).toHtmlEscaped(),
-             cell(ModelListModel::TagColumn).toHtmlEscaped(),
-             cell(ModelListModel::DownloadsColumn),
-             cell(ModelListModel::LikesColumn),
-             cell(ModelListModel::UpdatedColumn));
+    const QString meta = I18n::t("类型 %1 · 下载 %2 · 点赞 %3 · 更新 %4")
+                             .arg(cell(ModelListModel::TagColumn).toHtmlEscaped(),
+                                  cell(ModelListModel::DownloadsColumn),
+                                  cell(ModelListModel::LikesColumn),
+                                  cell(ModelListModel::UpdatedColumn));
+    return QStringLiteral("<b>%1</b><br><span style=\"color:#b0b0c0;\">%2</span>")
+        .arg(cell(ModelListModel::IdColumn).toHtmlEscaped(), meta);
 }
 
 void ModelManageDialog::onRowHovered(const QModelIndex & index) {
@@ -640,7 +643,7 @@ void ModelManageDialog::showModelTooltip() {
         return;
     }
     const QString desc = m_descCache.value(m_hoverId);
-    const QString body = desc.isEmpty() ? QStringLiteral("（暂无模型介绍）")
+    const QString body = desc.isEmpty() ? I18n::t("（暂无模型介绍）")
                                         : desc.toHtmlEscaped();
     const QString html = QStringLiteral("%1<br><br>%2").arg(m_hoverBase, body);
     QLabel * tip = hoverTip();

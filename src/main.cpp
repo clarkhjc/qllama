@@ -1,3 +1,4 @@
+#include "I18n.h"
 #include "Logging.h"
 #include "MainWindow.h"
 #include "Theme.h"
@@ -20,6 +21,13 @@ int main(int argc, char * argv[]) {
         theme = qEnvironmentVariable("QLLAMA_THEME");
     }
     Theme::apply(theme); // 加载 assets/themes/<name>.qss + 调色板
+
+    // 语言：QLLAMA_LANG 环境变量（调试/截图）> 上次选择（QSettings）> 中文
+    QString language = settings.value("ui/language", "zh").toString();
+    if (qEnvironmentVariableIsSet("QLLAMA_LANG")) {
+        language = qEnvironmentVariable("QLLAMA_LANG");
+    }
+    I18n::setLanguage(language);
 
     // 跨线程 QueuedConnection 需要注册自定义类型的元类型
     qRegisterMetaType<ChatOptions>("ChatOptions");

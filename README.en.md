@@ -17,6 +17,8 @@ the **llama.cpp 0.9.0** C API (`llama.h`) and the common chat-template API
   the official site is unreachable; customizable save directory, with progress bar)
 - **Three themes**: light / dark / pink, switchable in one click from the config dialog
   (live preview, persisted), with all widget styles living in QSS
+- **Chinese & English UI**: switch between 中文 and English (live preview, persisted);
+  widgets, hints, status bar and chat records are retranslated together
 - **Glassmorphism**: gradient background + glass cards + gradient avatars/icons
 - **System monitor**: persistent CPU / memory / GPU usage in the status bar (color-coded,
   refreshed every 2 seconds)
@@ -147,6 +149,7 @@ in the corresponding classes under `src/`:
 | Parameter | Default | Description |
 |---|---|---|
 | 主题 Theme | light | light / dark / pink; clicking previews immediately, 「确定」(OK) persists it |
+| 语言 Language | 中文 | 中文 / English; clicking previews immediately, 「确定」(OK) persists it |
 | 投影模型 Projector model | empty | multimodal projector mmproj*.gguf; once loaded, 「添加图片」(Add Image) lets you send images (auto-detected when selecting a model) |
 | Top-K | 40 | candidate token cutoff; 0 = disabled |
 | Top-P | 0.95 | nucleus sampling cumulative probability threshold |

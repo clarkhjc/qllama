@@ -1,4 +1,5 @@
 #include "ModelListModel.h"
+#include "I18n.h"
 
 namespace {
 
@@ -71,11 +72,11 @@ QVariant ModelListModel::headerData(int section, Qt::Orientation orientation, in
         return QAbstractTableModel::headerData(section, orientation, role);
     }
     switch (section) {
-    case IdColumn:        return QStringLiteral("模型 ID");
-    case TagColumn:       return QStringLiteral("类型");
-    case DownloadsColumn: return QStringLiteral("下载量");
-    case LikesColumn:     return QStringLiteral("点赞");
-    case UpdatedColumn:   return QStringLiteral("更新时间");
+    case IdColumn:        return I18n::t("模型 ID");
+    case TagColumn:       return I18n::t("类型");
+    case DownloadsColumn: return I18n::t("下载量");
+    case LikesColumn:     return I18n::t("点赞");
+    case UpdatedColumn:   return I18n::t("更新时间");
     default:              return {};
     }
 }

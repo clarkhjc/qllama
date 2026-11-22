@@ -222,11 +222,11 @@ QPushButton:disabled {
 }
 
 /* —— 主题切换按钮（配置页·性能与界面） —— */
-#themeLightBtn, #themeDarkBtn, #themePinkBtn {
+#themeLightBtn, #themeDarkBtn, #themePinkBtn, #langZhBtn, #langEnBtn {
     padding: 6px 16px;
 }
 
-#themeLightBtn:checked, #themeDarkBtn:checked, #themePinkBtn:checked {
+#themeLightBtn:checked, #themeDarkBtn:checked, #themePinkBtn:checked, #langZhBtn:checked, #langEnBtn:checked {
     border: none;
     background: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 1,
                                 stop: 0 #ff6fa5, stop: 1 #c86bff);
@@ -234,7 +234,7 @@ QPushButton:disabled {
     font-weight: 600;
 }
 
-#themeLightBtn:hover:!checked, #themeDarkBtn:hover:!checked, #themePinkBtn:hover:!checked {
+#themeLightBtn:hover:!checked, #themeDarkBtn:hover:!checked, #themePinkBtn:hover:!checked, #langZhBtn:hover:!checked, #langEnBtn:hover:!checked {
     border: 1px solid #ff9ec4;
     color: #d94f8a;
 }

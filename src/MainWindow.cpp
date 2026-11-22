@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "I18n.h"
 #include "Markdown.h"
 #include "ModelManageDialog.h"
 #include "Theme.h"
@@ -92,14 +93,16 @@ static QString welcomeHtml() {
     const ThemePalette & t = Theme::palette();
     const QString logo = avatarDataUri(":/assets/icons/message-circle-white.svg",
                                        t.avatarAssistant1, t.avatarAssistant2, 256);
+    const QString subtitle = I18n::t("选择模型并点击「加载模型」，然后开始对话")
+                             + QStringLiteral("<br>")
+                             + I18n::t("支持 Markdown 渲染 · 图片问答 · 长对话上下文复用");
     return QStringLiteral(
         "<div style=\"text-align:center;margin-top:70px;\">"
         "<img src=\"%1\" width=\"72\" height=\"72\">"
-        "<div style=\"font-size:20px;font-weight:600;color:%2;margin-top:16px;\">qllama · 本地大模型对话</div>"
-        "<div style=\"color:%3;margin-top:10px;font-size:13px;\">"
-        "选择模型并点击「加载模型」，然后开始对话<br>"
-        "支持 Markdown 渲染 · 图片问答 · 长对话上下文复用</div>"
-        "</div>").arg(logo, Theme::css(t.welcomeTitle), Theme::css(t.welcomeSubtitle));
+        "<div style=\"font-size:20px;font-weight:600;color:%2;margin-top:16px;\">%4</div>"
+        "<div style=\"color:%3;margin-top:10px;font-size:13px;\">%5</div>"
+        "</div>").arg(logo, Theme::css(t.welcomeTitle), Theme::css(t.welcomeSubtitle),
+                       I18n::t("qllama · 本地大模型对话"), subtitle);
 }
 
 // 助手消息头（含/不含“正在生成”状态标记）
@@ -111,13 +114,14 @@ static QString assistantHeaderHtml(bool generating) {
     return QStringLiteral(
         "<div style=\"margin:14px 0 6px 0;\">"
         "<img src=\"%1\" width=\"26\" height=\"26\" style=\"vertical-align:middle;margin-right:8px;\">"
-        "<b style=\"color:%2;\">助手</b>"
+        "<b style=\"color:%2;\">%6</b>"
         "<span style=\"color:%3;font-size:11px;margin-left:8px;\">%4</span>"
         "%5</div>")
         .arg(avatar, Theme::css(t.assistantName), Theme::css(t.textMuted), timeStr,
-             generating ? QStringLiteral("<span style=\"color:%1;margin-left:8px;\">正在生成…</span>")
-                              .arg(Theme::css(t.textSecondary))
-                        : QString());
+             generating ? QStringLiteral("<span style=\"color:%1;margin-left:8px;\">%2</span>")
+                              .arg(Theme::css(t.textSecondary), I18n::t("正在生成…"))
+                        : QString(),
+             I18n::t("助手"));
 }
 
 // 助手消息气泡（Markdown HTML 外层）：左对齐，贴合内容宽度
@@ -155,6 +159,7 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     ui.setupUi(this); // 界面布局见 ui/mainwindow.ui（Qt Designer 编辑）
     setWindowIcon(QIcon(":/assets/icons/appicon.png"));
     m_config.theme = Theme::currentName(); // 启动主题由 main() 应用，这里同步到配置
+    m_config.language = I18n::current();   // 启动语言同样由 main() 应用
 
     // 滚动区域透明，露出窗口背景
     ui.chatView->viewport()->setAutoFillBackground(false);
@@ -216,9 +221,10 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     setStatusDot(ui.statusDot, "idle");
 
     // —— 系统监控：CPU / 内存 / GPU（2 秒刷新，状态栏右侧常驻） ——
-    m_monitorLabel = new QLabel(QStringLiteral("CPU — · 内存 — · GPU —"));
+    m_monitorLabel = new QLabel;
     m_monitorLabel->setObjectName("monitorLabel");
     statusBar()->addPermanentWidget(m_monitorLabel); // addPermanentWidget 默认靠右排列
+    updateMonitorLabel();
     m_monitor = new SysMonitor(this);
     connect(m_monitor, &SysMonitor::statsUpdated, this, [this](double cpu, double mem, int gpu) {
         if (qEnvironmentVariableIsSet("QLLAMA_DUMP_GEOMETRY")) {
@@ -227,18 +233,17 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
                 qInfo().noquote() << "MONITOR: cpu=" << cpu << " mem=" << mem << " gpu=" << gpu;
             }
         }
-        const QString gpuText = gpu >= 0 ? coloredPct(gpu)
-                                         : QStringLiteral("<span style=\"color:%1;\">—</span>")
-                                               .arg(Theme::css(Theme::palette().monitorNA));
-        m_monitorLabel->setText(QStringLiteral("CPU %1 · 内存 %2 · GPU %3")
-                                    .arg(coloredPct(cpu), coloredPct(mem), gpuText));
-        m_monitorLabel->setToolTip(QStringLiteral("系统级：CPU 利用率 · 内存占用率（活动监视器口径）· GPU 利用率"));
+        m_lastCpu = cpu;
+        m_lastMem = mem;
+        m_lastGpu = gpu;
+        updateMonitorLabel();
     });
     m_monitor->start(2000);
 
-    statusBar()->showMessage("未加载模型");
+    statusBar()->showMessage(I18n::t("未加载模型"));
 
     prefillModelPath();
+    I18n::retranslateTree(this); // .ui 中的静态文字按当前语言翻译
 
     // —— 自测模式：加载模型 → 两轮对话 → 截图 → 退出 ——
     if (m_selfTest) {
@@ -340,8 +345,9 @@ void MainWindow::prefillModelPath() {
 
 // —— 用户操作 ——
 void MainWindow::browseModel() {
-    const QString path = QFileDialog::getOpenFileName(this, "选择 GGUF 模型",
-        QFileInfo(ui.modelPath->text()).absolutePath(), "GGUF 模型 (*.gguf);;所有文件 (*)");
+    const QString path = QFileDialog::getOpenFileName(this, I18n::t("选择 GGUF 模型"),
+        QFileInfo(ui.modelPath->text()).absolutePath(),
+        I18n::t("GGUF 模型 (*.gguf);;所有文件 (*)"));
     if (!path.isEmpty()) {
         ui.modelPath->setText(path);
         prefillMmprojForModel();
@@ -350,9 +356,14 @@ void MainWindow::browseModel() {
 
 // 打开配置页面（精简配置 / 全量配置）
 void MainWindow::onConfig() {
+    const QString oldTheme = m_config.theme;
+    const QString oldLanguage = m_config.language;
     ConfigDialog dlg(m_config, this);
+    // 语言按钮实时预览：立即重译主窗口
+    connect(&dlg, &ConfigDialog::languageChanged, this, [this](const QString & code) {
+        applyLanguage(code);
+    });
     if (dlg.exec() == QDialog::Accepted) {
-        const QString oldTheme = m_config.theme;
         m_config = dlg.config();
         if (m_config.theme != oldTheme) {
             // 主题已在配置页实时预览；这里确认应用并重建聊天记录（HTML 颜色随主题）
@@ -361,10 +372,15 @@ void MainWindow::onConfig() {
             refreshIcons();
             rebuildChatView();
         }
-        statusBar()->showMessage("配置已更新", 3000);
+        if (m_config.language != oldLanguage) {
+            QSettings().setValue("ui/language", m_config.language);
+            applyLanguage(m_config.language);
+        }
+        statusBar()->showMessage(I18n::t("配置已更新"), 3000);
     } else {
-        // 取消：恢复到打开配置页前的主题（期间可能被实时预览改过）
+        // 取消：恢复到打开配置页前的主题与语言（期间可能被实时预览改过）
         Theme::apply(m_config.theme);
+        applyLanguage(oldLanguage);
     }
 }
 
@@ -374,7 +390,7 @@ void MainWindow::onManageModels() {
     connect(&dlg, &ModelManageDialog::modelDownloaded, this, [this](const QString & localPath) {
         ui.modelPath->setText(localPath); // 下载完成即设为当前模型
         prefillMmprojForModel();
-        statusBar()->showMessage("已设为当前模型：" + localPath + "（点击「加载模型」开始使用）", 8000);
+        statusBar()->showMessage(I18n::t("已设为当前模型：%1（点击「加载模型」开始使用）").arg(localPath), 8000);
         if (qEnvironmentVariableIsSet("QLLAMA_DUMP_GEOMETRY")) {
             qInfo().noquote() << "MODELPATH SET:" << ui.modelPath->text();
         }
@@ -400,18 +416,18 @@ void MainWindow::onLoadModel() {
         return;
     }
     if (!QFileInfo::exists(path)) {
-        QMessageBox::warning(this, "错误", "模型文件不存在：\n" + path);
+        QMessageBox::warning(this, I18n::t("错误"), I18n::t("模型文件不存在：\n%1").arg(path));
         return;
     }
     prefillMmprojForModel();
     ui.loadBtn->setEnabled(false);
     setStatusDot(ui.statusDot, "loading"); // 加载中
-    statusBar()->showMessage("正在加载模型，请稍候……");
+    statusBar()->showMessage(I18n::t("正在加载模型，请稍候……"));
     emit loadRequested(path, m_config.chat);
 }
 
 void MainWindow::onUnloadModel() {
-    statusBar()->showMessage("正在卸载模型……");
+    statusBar()->showMessage(I18n::t("正在卸载模型……"));
     emit unloadRequested();
 }
 
@@ -422,11 +438,11 @@ void MainWindow::onSend() {
         return;
     }
     if (hasImages && !m_modelHasVision) {
-        const QString msg = "当前模型未加载 mmproj 投影模型，无法处理图片。\n请选择投影模型后重新加载。";
+        const QString msg = I18n::t("当前模型未加载 mmproj 投影模型，无法处理图片。\n请选择投影模型后重新加载。");
         if (m_selfTest) {
             selfTestFinish(false, msg);
         } else {
-            QMessageBox::warning(this, "无法发送图片", msg);
+            QMessageBox::warning(this, I18n::t("无法发送图片"), msg);
         }
         return;
     }
@@ -458,7 +474,7 @@ void MainWindow::onSend() {
     appendAssistantHeader(); // 内部记录助手正文起点（流式原文，完成后用 Markdown 替换）
     ui.input->clear();
     setGenerating(true);
-    statusBar()->showMessage("生成中……");
+    statusBar()->showMessage(I18n::t("生成中……"));
     scrollChatToBottom(); // 让用户消息与「正在生成…」立即进入视野
 
     emit generateRequested(msgs, m_config.chat);
@@ -466,7 +482,7 @@ void MainWindow::onSend() {
 
 void MainWindow::onStop() {
     emit stopRequested(); // DirectConnection，生成循环中即刻生效
-    statusBar()->showMessage("正在停止……");
+    statusBar()->showMessage(I18n::t("正在停止……"));
 }
 
 void MainWindow::onClearChat() {
@@ -477,11 +493,11 @@ void MainWindow::onClearChat() {
 
 void MainWindow::onAddImages() {
     if (m_attachedImages.size() >= 4) {
-        QMessageBox::information(this, "图片数量限制", "一次最多发送 4 张图片。");
+        QMessageBox::information(this, I18n::t("图片数量限制"), I18n::t("一次最多发送 4 张图片。"));
         return;
     }
-    const QStringList paths = QFileDialog::getOpenFileNames(this, "选择图片", QDir::homePath(),
-        "图片 (*.png *.jpg *.jpeg *.bmp *.gif);;所有文件 (*)");
+    const QStringList paths = QFileDialog::getOpenFileNames(this, I18n::t("选择图片"), QDir::homePath(),
+        I18n::t("图片 (*.png *.jpg *.jpeg *.bmp *.gif);;所有文件 (*)"));
     for (const QString & p : paths) {
         if (m_attachedImages.size() >= 4) {
             break;
@@ -510,7 +526,7 @@ void MainWindow::refreshImageStrip() {
         btn->setIconSize(QSize(56, 56));
         btn->setFixedSize(72, 72);
         btn->setObjectName("thumbBtn");
-        btn->setToolTip("点击移除：" + path);
+        btn->setToolTip(I18n::t("点击移除：%1").arg(path));
         const int idx = i;
         connect(btn, &QPushButton::clicked, this, [this, idx] {
             m_attachedImages.removeAt(idx);
@@ -529,10 +545,10 @@ void MainWindow::onModelLoaded(const QString & info, bool hasVision) {
     ui.unloadBtn->setEnabled(true);
     ui.sendBtn->setEnabled(!ui.input->toPlainText().trimmed().isEmpty()); // 输入为空时保持禁用
     setStatusDot(ui.statusDot, "ok"); // 已加载
-    QString summary = "已加载 " + info + (hasVision ? " · 多模态" : "")
-                      + QString(" · 上下文 %1 · 温度 %2")
-                            .arg(m_config.chat.n_ctx)
-                            .arg(m_config.chat.temperature, 0, 'f', 2);
+    QString summary = I18n::t("已加载 %1%2 · 上下文 %3 · 温度 %4")
+                          .arg(info, hasVision ? I18n::t(" · 多模态") : QString())
+                          .arg(m_config.chat.n_ctx)
+                          .arg(m_config.chat.temperature, 0, 'f', 2);
     statusBar()->showMessage(summary);
     if (m_selfTest) {
         qInfo().noquote() << "SELFTEST 模型已加载:" << info << "多模态:" << hasVision;
@@ -552,8 +568,8 @@ void MainWindow::onModelLoaded(const QString & info, bool hasVision) {
 void MainWindow::onModelLoadFailed(const QString & err) {
     ui.loadBtn->setEnabled(true);
     setStatusDot(ui.statusDot, "error"); // 加载失败
-    statusBar()->showMessage("模型加载失败");
-    QMessageBox::critical(this, "加载失败", err);
+    statusBar()->showMessage(I18n::t("模型加载失败"));
+    QMessageBox::critical(this, I18n::t("加载失败"), err);
     if (m_selfTest) {
         selfTestFinish(false, "模型加载失败: " + err);
     }
@@ -566,7 +582,7 @@ void MainWindow::onModelUnloaded() {
     ui.unloadBtn->setEnabled(false);
     ui.sendBtn->setEnabled(false);
     setStatusDot(ui.statusDot, "idle"); // 未加载
-    statusBar()->showMessage("未加载模型");
+    statusBar()->showMessage(I18n::t("未加载模型"));
 }
 
 void MainWindow::onTokenReady(const QString & piece) {
@@ -602,15 +618,16 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
         m_history.append(ChatMessage{"assistant", text.toStdString()});
     }
     // 统计行（替代分隔线）：生成 token 数、速度、本轮解码量
+    // 统计行（替代分隔线）：生成 token 数、速度、本轮解码量
+    const QString statLine = I18n::t("生成 %1 token · %2 tok/s · 本轮解码 %3 token")
+                                 .arg(result.generated_tokens)
+                                 .arg(result.tokens_per_sec, 0, 'f', 1)
+                                 .arg(result.prompt_tokens);
     ui.chatView->append(QStringLiteral(
-        "<div style=\"color:%1;font-size:11px;margin:4px 0 14px 0;\">"
-        "生成 %2 token · %3 tok/s · 本轮解码 %4 token</div>")
-        .arg(Theme::css(Theme::palette().statText))
-        .arg(result.generated_tokens)
-        .arg(result.tokens_per_sec, 0, 'f', 1)
-        .arg(result.prompt_tokens));
+        "<div style=\"color:%1;font-size:11px;margin:4px 0 14px 0;\">%2</div>")
+        .arg(Theme::css(Theme::palette().statText), statLine));
     setGenerating(false);
-    const QString stats = QString("解码 %1 token · 生成 %2 token · %3 tok/s")
+    const QString stats = I18n::t("解码 %1 token · 生成 %2 token · %3 tok/s")
                               .arg(result.prompt_tokens)
                               .arg(result.generated_tokens)
                               .arg(result.tokens_per_sec, 0, 'f', 1);
@@ -627,6 +644,12 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
                                  .arg(result.tokens_per_sec, 0, 'f', 1);
         qInfo().noquote() << "SELFTEST 回复:" << text;
         if (m_selfTestTurn == 1) {
+            // 调试：QLLAMA_TEST_LANG_SWITCH=en|zh 时在两轮之间切换语言
+            const QByteArray switchLang = qgetenv("QLLAMA_TEST_LANG_SWITCH");
+            if (!switchLang.isEmpty()) {
+                applyLanguage(QString::fromUtf8(switchLang));
+                qInfo().noquote() << "LANGSWITCH:" << m_config.language;
+            }
             // 调试：QLLAMA_TEST_THEME_SWITCH=<light|dark|pink> 时在两轮之间切换主题，
             // 验证「实时切换 + 聊天记录按新配色重建」全链路
             const QByteArray switchTo = qgetenv("QLLAMA_TEST_THEME_SWITCH");
@@ -654,10 +677,11 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
 void MainWindow::onGenerationFailed(const QString & err) {
     finishAssistantHeader(); // 移除“正在生成”标记
     m_assistantStartPos = -1;
-    ui.chatView->append(QStringLiteral("<div style=\"color:%1;margin:6px 0;\">生成失败：%2</div>")
-                            .arg(Theme::css(Theme::palette().errorText), err.toHtmlEscaped()));
+    ui.chatView->append(QStringLiteral("<div style=\"color:%1;margin:6px 0;\">%2</div>")
+                            .arg(Theme::css(Theme::palette().errorText),
+                                 I18n::t("生成失败：%1").arg(err.toHtmlEscaped())));
     setGenerating(false);
-    statusBar()->showMessage("生成失败");
+    statusBar()->showMessage(I18n::t("生成失败"));
     scrollChatToBottom();
     if (m_selfTest) {
         selfTestFinish(false, "生成失败: " + err);
@@ -704,10 +728,11 @@ void MainWindow::appendUserMessage(const QString & text, const QStringList & ima
     const QString headerRow = QStringLiteral(
         "<tr><td align=\"right\" style=\"padding:14px 0 6px 0;\">"
         "<span style=\"color:%1;font-size:11px;margin-right:8px;\">%2</span>"
-        "<b style=\"color:%3;\">你</b>"
+        "<b style=\"color:%3;\">%5</b>"
         "<img src=\"%4\" width=\"26\" height=\"26\" style=\"vertical-align:middle;margin-left:8px;\">"
         "</td></tr>")
-        .arg(Theme::css(t.textMuted), timeStr, Theme::css(t.userName), avatar);
+        .arg(Theme::css(t.textMuted), timeStr, Theme::css(t.userName), avatar,
+             I18n::t("你"));
 
     QString bodyRows;
     // 图片行（右对齐）
@@ -752,6 +777,38 @@ void MainWindow::scrollChatToBottom() {
     };
     QTimer::singleShot(0, this, scrollNow);
     QTimer::singleShot(50, this, scrollNow);
+}
+
+// 按当前语言刷新状态栏的 CPU/内存/GPU 文字
+void MainWindow::updateMonitorLabel() {
+    if (!m_monitorLabel) {
+        return;
+    }
+    const QColor na = Theme::palette().monitorNA;
+    const QString dash = QStringLiteral("<span style=\"color:%1;\">—</span>").arg(Theme::css(na));
+    auto fmt = [&dash](double pct) {
+        return pct < 0 ? dash : coloredPct(pct);
+    };
+    const QString gpu = m_lastGpu >= 0 ? coloredPct(m_lastGpu) : dash;
+    m_monitorLabel->setText(I18n::t("CPU %1 · 内存 %2 · GPU %3")
+                                .arg(fmt(m_lastCpu), fmt(m_lastMem), gpu));
+    m_monitorLabel->setToolTip(I18n::t("系统级：CPU 利用率 · 内存占用率（活动监视器口径）· GPU 利用率"));
+}
+
+// 切换界面语言：重译静态控件 + 动态文字 + 重建聊天记录
+void MainWindow::applyLanguage(const QString & code) {
+    I18n::setLanguage(code);
+    m_config.language = I18n::normalized(code);
+    I18n::retranslateTree(this);
+    updateMonitorLabel();
+    if (m_generating) {
+        statusBar()->showMessage(I18n::t("生成中……"));
+    } else if (!m_modelLoaded) {
+        statusBar()->showMessage(I18n::t("未加载模型"));
+    } else {
+        statusBar()->showMessage(I18n::t("已加载模型"));
+    }
+    rebuildChatView();
 }
 
 // 按当前主题重建整个聊天记录（切换主题后调用）

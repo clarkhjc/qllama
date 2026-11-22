@@ -1,4 +1,5 @@
 #include "ConfigDialog.h"
+#include "I18n.h"
 #include "Logging.h"
 #include "Theme.h"
 
@@ -42,6 +43,11 @@ ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog
     ui.themeDarkBtn->setChecked(m_theme == "dark");
     ui.themePinkBtn->setChecked(m_theme == "pink");
 
+    // 语言（按钮点击立即预览）
+    m_language = I18n::normalized(config.language);
+    ui.langZhBtn->setChecked(m_language == "zh");
+    ui.langEnBtn->setChecked(m_language == "en");
+
     ui.mmprojEdit->setText(QString::fromStdString(config.chat.mmprojPath));
     ui.topKSpin->setValue(config.chat.top_k);
     ui.topPSpin->setValue(config.chat.top_p);
@@ -62,20 +68,25 @@ ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog
     connect(ui.seedRandomCheck, &QCheckBox::toggled, ui.seedSpin, &QSpinBox::setDisabled);
     connect(ui.buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(ui.buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    ui.buttonBox->button(QDialogButtonBox::Ok)->setText("确定");
-    ui.buttonBox->button(QDialogButtonBox::Cancel)->setText("取消");
 
     // 主题切换按钮：点击立即应用（实时预览；取消时主窗口会恢复原主题）
     connect(ui.themeLightBtn, &QPushButton::clicked, this, [this] { setTheme("light"); });
     connect(ui.themeDarkBtn, &QPushButton::clicked, this, [this] { setTheme("dark"); });
     connect(ui.themePinkBtn, &QPushButton::clicked, this, [this] { setTheme("pink"); });
 
+    // 语言切换按钮：点击立即预览（取消时主窗口会恢复原语言）
+    connect(ui.langZhBtn, &QPushButton::clicked, this, [this] { setLanguage("zh"); });
+    connect(ui.langEnBtn, &QPushButton::clicked, this, [this] { setLanguage("en"); });
+
     // —— 图标（单色 SVG 按主题着色，见 Theme::icon） ——
     refreshIcons();
     ui.tabs->setIconSize(QSize(16, 16));
 
+    // 静态控件文字（.ui 中文 → 当前语言）+ 动态文字
+    I18n::retranslateTree(this);
+    refreshTexts();
+
     // —— 打开日志：在 Finder 中定位日志文件 ——
-    ui.openLogBtn->setToolTip("日志文件：" + logFilePath());
     connect(ui.openLogBtn, &QPushButton::clicked, this, [] {
         const QString path = logFilePath();
         if (QFileInfo::exists(path)) {
@@ -91,6 +102,22 @@ void ConfigDialog::setTheme(const QString & name) {
     refreshIcons();
 }
 
+// 语言按钮：应用并重译界面
+void ConfigDialog::setLanguage(const QString & code) {
+    m_language = I18n::normalized(code);
+    I18n::setLanguage(m_language);
+    I18n::retranslateTree(this);
+    refreshTexts();
+    emit languageChanged(m_language);
+}
+
+// 语言切换后刷新代码中设置的文字
+void ConfigDialog::refreshTexts() {
+    ui.buttonBox->button(QDialogButtonBox::Ok)->setText(I18n::t("确定"));
+    ui.buttonBox->button(QDialogButtonBox::Cancel)->setText(I18n::t("取消"));
+    ui.openLogBtn->setToolTip(I18n::t("日志文件：%1").arg(logFilePath()));
+}
+
 void ConfigDialog::refreshIcons() {
     ui.browseMmprojBtn->setIcon(Theme::icon("folder"));
     ui.buttonBox->button(QDialogButtonBox::Ok)->setIcon(Theme::icon("check"));
@@ -104,6 +131,7 @@ AppConfig ConfigDialog::config() const {
     AppConfig c;
     c.systemPrompt = ui.systemPromptEdit->text().trimmed();
     c.theme        = m_theme;
+    c.language     = m_language;
 
     ChatOptions & o = c.chat;
     o.n_ctx           = (uint32_t) ui.ctxSpin->value();
@@ -122,9 +150,9 @@ AppConfig ConfigDialog::config() const {
 }
 
 void ConfigDialog::browseMmproj() {
-    const QString path = QFileDialog::getOpenFileName(this, "选择多模态投影模型",
+    const QString path = QFileDialog::getOpenFileName(this, I18n::t("选择多模态投影模型"),
         QFileInfo(ui.mmprojEdit->text()).absolutePath(),
-        "mmproj 模型 (*.gguf);;GGUF 模型 (*.gguf);;所有文件 (*)");
+        I18n::t("mmproj 模型 (*.gguf);;GGUF 模型 (*.gguf);;所有文件 (*)"));
     if (!path.isEmpty()) {
         ui.mmprojEdit->setText(path);
     }
