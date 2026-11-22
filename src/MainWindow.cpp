@@ -163,7 +163,7 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     // —— 按钮图标（Feather 图标，按当前主题着色，见 Theme::icon） ——
     refreshIcons();
     const QList<QPushButton *> iconBtns = {
-        ui.browseModelBtn, ui.loadBtn, ui.unloadBtn, ui.clearBtn,
+        ui.browseModelBtn, ui.loadBtn, ui.unloadBtn, ui.manageModelsBtn, ui.clearBtn,
         ui.configBtn, ui.addImageBtn, ui.sendBtn, ui.stopBtn,
     };
     for (QPushButton * b : iconBtns) {
@@ -785,6 +785,7 @@ void MainWindow::refreshIcons() {
     ui.browseModelBtn->setIcon(Theme::icon("folder"));
     ui.loadBtn->setIcon(Theme::icon("play-circle-white"));
     ui.unloadBtn->setIcon(Theme::icon("x-circle"));
+    ui.manageModelsBtn->setIcon(Theme::icon("download")); // 管理模型：从 Hugging Face 下载
     ui.clearBtn->setIcon(Theme::icon("trash-2"));
     ui.configBtn->setIcon(Theme::icon("sliders"));
     ui.addImageBtn->setIcon(Theme::icon("image"));
