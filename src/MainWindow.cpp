@@ -22,6 +22,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSettings>
 #include <QShowEvent>
 #include <QSpinBox>
@@ -458,6 +459,7 @@ void MainWindow::onSend() {
     ui.input->clear();
     setGenerating(true);
     statusBar()->showMessage("生成中……");
+    scrollChatToBottom(); // 让用户消息与「正在生成…」立即进入视野
 
     emit generateRequested(msgs, m_config.chat);
 }
@@ -614,6 +616,7 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
                               .arg(result.tokens_per_sec, 0, 'f', 1);
     statusBar()->showMessage(stats);
     ui.input->setFocus();
+    scrollChatToBottom(); // Markdown 替换 + 统计行追加后滚动到底
 
     if (m_selfTest) {
         m_selfTestTurn++;
@@ -655,6 +658,7 @@ void MainWindow::onGenerationFailed(const QString & err) {
                             .arg(Theme::css(Theme::palette().errorText), err.toHtmlEscaped()));
     setGenerating(false);
     statusBar()->showMessage("生成失败");
+    scrollChatToBottom();
     if (m_selfTest) {
         selfTestFinish(false, "生成失败: " + err);
     }
@@ -738,6 +742,18 @@ void MainWindow::appendUserMessage(const QString & text, const QStringList & ima
         .arg(headerRow, bodyRows));
 }
 
+// 滚到聊天记录末尾。
+// 插入 Markdown HTML / 统计行后文档是异步重新布局的，立即设滚动条会停在旧的最大值，
+// 所以延后到事件循环末尾再滚，并调用两次以覆盖布局完成后的高度变化。
+void MainWindow::scrollChatToBottom() {
+    auto scrollNow = [this] {
+        QScrollBar * sb = ui.chatView->verticalScrollBar();
+        sb->setValue(sb->maximum());
+    };
+    QTimer::singleShot(0, this, scrollNow);
+    QTimer::singleShot(50, this, scrollNow);
+}
+
 // 按当前主题重建整个聊天记录（切换主题后调用）
 void MainWindow::rebuildChatView() {
     ui.chatView->clear();
@@ -761,6 +777,7 @@ void MainWindow::rebuildChatView() {
             }
         }
     }
+    scrollChatToBottom();
 }
 
 // 主窗口按钮图标：按当前主题重新着色

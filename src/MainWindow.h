@@ -62,6 +62,7 @@ private:
     void refreshImageStrip();
     void refreshIcons();          // 按当前主题重设工具栏图标
     void rebuildChatView();       // 切换主题后按新配色重建聊天记录
+    void scrollChatToBottom();    // 滚到聊天记录末尾（等文档布局完成后再滚）
     void selfTestAsk(const QString & prompt);
     void selfTestFinish(bool ok, const QString & reason);
 
