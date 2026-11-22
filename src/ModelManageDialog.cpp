@@ -23,6 +23,7 @@
 #include <QNetworkRequest>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScreen>
 #include <QSortFilterProxyModel>
 #include <QTableView>
 #include <QTimer>
@@ -63,6 +64,43 @@ static QString formatBytes(qint64 n) {
     return QStringLiteral("%1 B").arg(n);
 }
 
+// 从 README 提取一段纯文本介绍：去 YAML front matter / HTML 注释 / 图片 /
+// Markdown 标记，压缩空白，截断到约 280 字。
+static QString readmeSummary(QString md) {
+    if (md.startsWith(QStringLiteral("---"))) {
+        const int end = md.indexOf(QStringLiteral("\n---"), 3);
+        if (end >= 0) {
+            const int nl = md.indexOf('\n', end + 4);
+            md = nl >= 0 ? md.mid(nl + 1) : QString();
+        }
+    }
+    static const QRegularExpression reComment("<!--.*?-->",
+                                              QRegularExpression::DotMatchesEverythingOption);
+    md.remove(reComment);
+    static const QRegularExpression reImage(R"(!\[[^\]]*\]\([^)]*\))");
+    md.remove(reImage);
+    static const QRegularExpression reLink(R"(\[([^\]]*)\]\([^)]*\))");
+    md.replace(reLink, QStringLiteral("\\1"));
+    static const QRegularExpression reHtml("<[^>]+>");
+    md.remove(reHtml);
+    static const QRegularExpression reHeading(R"(^\s{0,3}#{1,6}\s*)",
+                                              QRegularExpression::MultilineOption);
+    md.remove(reHeading);
+    static const QRegularExpression reBullet(R"(^\s*[-*+]\s+)",
+                                             QRegularExpression::MultilineOption);
+    md.remove(reBullet);
+    md.remove(QLatin1Char('`'));
+    md.remove(QStringLiteral("**"));
+    md.remove(QStringLiteral("__"));
+    static const QRegularExpression reSpaces("\\s+");
+    md.replace(reSpaces, QStringLiteral(" "));
+    md = md.trimmed();
+    if (md.size() > 280) {
+        md = md.left(280) + QStringLiteral("…");
+    }
+    return md;
+}
+
 } // namespace
 
 ModelManageDialog::ModelManageDialog(const AppConfig & config, QWidget * parent) : QDialog(parent) {
@@ -80,6 +118,27 @@ ModelManageDialog::ModelManageDialog(const AppConfig & config, QWidget * parent)
     for (int i = 1; i < ModelListModel::ColumnCount; i++) {
         ui.table->horizontalHeader()->setSectionResizeMode(i, QHeaderView::ResizeToContents);
     }
+
+    // 悬停行 → 显示元信息并拉取 README 介绍（300ms 防抖，结果缓存）
+    ui.table->viewport()->setMouseTracking(true);
+    ui.table->viewport()->installEventFilter(this);
+    connect(ui.table, &QTableView::entered, this, &ModelManageDialog::onRowHovered);
+    m_descTimer = new QTimer(this);
+    m_descTimer->setSingleShot(true);
+    m_descTimer->setInterval(300);
+    connect(m_descTimer, &QTimer::timeout, this, [this] {
+        if (m_hoverId.isEmpty()) {
+            return;
+        }
+        const auto it = m_descCache.constFind(m_hoverId);
+        if (it != m_descCache.constEnd()) {
+            showModelTooltip(); // 已缓存
+            return;
+        }
+        if (!m_descRequested.contains(m_hoverId)) {
+            fetchDescription(m_hoverId, m_listMirror);
+        }
+    });
 
     ui.searchEdit->setClearButtonEnabled(true);
     ui.refreshBtn->setIcon(Theme::icon("play-circle"));
@@ -226,6 +285,32 @@ void ModelManageDialog::handleModelsReply(QNetworkReply * reply, bool wasMirror)
     m_model->setModels(models);
     ui.table->setCurrentIndex(QModelIndex()); // 清空选中行（触发按钮状态刷新）
     updateSelectionActions();
+
+    // 列表来源决定 README 用哪个站点（官方 / 镜像）
+    m_listMirror = wasMirror;
+    m_hoverId.clear();
+    if (m_descTimer) {
+        m_descTimer->stop();
+    }
+    if (m_hoverTip) {
+        m_hoverTip->hide();
+    }
+
+    // 调试：QLLAMA_TEST_HOVER=1 拉取第一条模型的介绍；=某个仓库 ID 则拉取指定模型
+    if (qEnvironmentVariableIsSet("QLLAMA_TEST_HOVER")) {
+        const QString testId = qEnvironmentVariable("QLLAMA_TEST_HOVER");
+        QTimer::singleShot(300, this, [this, testId] {
+            const QString id = (testId.isEmpty() || testId == "1")
+                                   ? m_model->idAt(0)
+                                   : testId;
+            if (id.isEmpty()) {
+                return;
+            }
+            m_hoverId = id;
+            m_hoverBase = QStringLiteral("<b>%1</b>").arg(id.toHtmlEscaped());
+            fetchDescription(id, m_listMirror);
+        });
+    }
 
     ui.statusLabel->setText(QStringLiteral("已拉取 %1 条模型（按最近更新排序）%2")
                                 .arg(arr.size())
@@ -456,3 +541,120 @@ void ModelManageDialog::onCopyId() {
     }
 }
 
+// —— 悬停显示模型介绍 ——
+
+// 鼠标离开列表 / 关闭页面时收起提示
+bool ModelManageDialog::eventFilter(QObject * watched, QEvent * event) {
+    if (watched == ui.table->viewport() && event->type() == QEvent::Leave) {
+        m_hoverId.clear();
+        if (m_descTimer) {
+            m_descTimer->stop();
+        }
+        if (m_hoverTip) {
+            m_hoverTip->hide();
+        }
+    }
+    return QDialog::eventFilter(watched, event);
+}
+
+// 悬停行的元信息（标题 + 类型/下载/点赞/更新），作为 tooltip 头部
+QString ModelManageDialog::hoverBaseHtml(const QModelIndex & index) const {
+    const int row = index.row();
+    auto cell = [&index, row](int column) {
+        return index.sibling(row, column).data().toString();
+    };
+    return QStringLiteral(
+               "<b>%1</b><br><span style=\"color:#b0b0c0;\">"
+               "类型 %2 · 下载 %3 · 点赞 %4 · 更新 %5</span>")
+        .arg(cell(ModelListModel::IdColumn).toHtmlEscaped(),
+             cell(ModelListModel::TagColumn).toHtmlEscaped(),
+             cell(ModelListModel::DownloadsColumn),
+             cell(ModelListModel::LikesColumn),
+             cell(ModelListModel::UpdatedColumn));
+}
+
+void ModelManageDialog::onRowHovered(const QModelIndex & index) {
+    if (!index.isValid()) {
+        return;
+    }
+    const QString id = index.sibling(index.row(), ModelListModel::IdColumn).data().toString();
+    if (id.isEmpty() || id == m_hoverId) {
+        return;
+    }
+    m_hoverId = id;
+    m_hoverBase = hoverBaseHtml(index);
+    if (m_hoverTip && m_hoverTip->isVisible()) {
+        m_hoverTip->hide(); // 移到新行时先收起旧提示，防抖后再显示新行
+    }
+    m_descTimer->start(); // 防抖：停留 300ms 才拉取 README
+}
+
+// 拉取模型 README（先按列表来源站点，失败自动换另一个站点）
+void ModelManageDialog::fetchDescription(const QString & id, bool useMirror) {
+    m_descRequested.insert(id);
+    QNetworkRequest req(QUrl(apiHost(useMirror) + "/" + id + "/raw/main/README.md"));
+    req.setTransferTimeout(8000);
+    QNetworkReply * reply = m_nam.get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, id, useMirror] {
+        handleDescriptionReply(reply, id, useMirror);
+    });
+}
+
+void ModelManageDialog::handleDescriptionReply(QNetworkReply * reply, const QString & id,
+                                               bool wasMirror) {
+    reply->deleteLater();
+    if (reply->error() != QNetworkReply::NoError) {
+        if (!wasMirror) {
+            fetchDescription(id, true); // 官方站失败 → 镜像重试一次
+            return;
+        }
+        m_descCache.insert(id, QString()); // 两个站点都没有 README
+    } else {
+        m_descCache.insert(id, readmeSummary(QString::fromUtf8(reply->readAll())));
+    }
+    if (qEnvironmentVariableIsSet("QLLAMA_TEST_HOVER")) {
+        qInfo().noquote() << "DESC:" << id << "=>" << m_descCache.value(id).left(120);
+    }
+    if (id == m_hoverId) {
+        showModelTooltip(); // 鼠标仍停留在该行
+    }
+}
+
+// 自绘提示窗：QToolTip 在 macOS 下是系统半透明窗口，文字会被下方内容干扰，
+// 因此用无边框 ToolTip 类型的 QLabel 自己显示，背景完全由 QSS 控制（不透明）。
+QLabel * ModelManageDialog::hoverTip() {
+    if (!m_hoverTip) {
+        m_hoverTip = new QLabel(this, Qt::ToolTip | Qt::FramelessWindowHint);
+        m_hoverTip->setObjectName("modelHoverTip");
+        m_hoverTip->setTextFormat(Qt::RichText);
+        m_hoverTip->setWordWrap(true); // 固定宽度内自动换行（富文本 table width 不可靠）
+        m_hoverTip->setAttribute(Qt::WA_ShowWithoutActivating);
+        m_hoverTip->setAttribute(Qt::WA_TransparentForMouseEvents);
+        m_hoverTip->setFocusPolicy(Qt::NoFocus);
+    }
+    return m_hoverTip;
+}
+
+void ModelManageDialog::showModelTooltip() {
+    if (m_hoverId.isEmpty()) {
+        return;
+    }
+    const QString desc = m_descCache.value(m_hoverId);
+    const QString body = desc.isEmpty() ? QStringLiteral("（暂无模型介绍）")
+                                        : desc.toHtmlEscaped();
+    const QString html = QStringLiteral("%1<br><br>%2").arg(m_hoverBase, body);
+    QLabel * tip = hoverTip();
+    tip->setFixedWidth(430);
+    tip->setText(html);
+    tip->adjustSize();
+    // 显示在光标右下方，并保证不超出屏幕
+    QPoint pos = QCursor::pos() + QPoint(14, 18);
+    if (const QScreen * scr = screen()) {
+        const QRect avail = scr->availableGeometry();
+        pos.setX(qBound(avail.left(), pos.x(), avail.right() - tip->width()));
+        pos.setY(qBound(avail.top(), pos.y(), avail.bottom() - tip->height()));
+    }
+    tip->move(pos);
+    tip->show();
+    tip->raise();
+}

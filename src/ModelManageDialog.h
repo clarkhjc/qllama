@@ -4,13 +4,17 @@
 
 #include <QDialog>
 #include <QFile>
+#include <QHash>
 #include <QModelIndex>
 #include <QNetworkAccessManager>
+#include <QSet>
 
 #include "ui_modelmanagedialog.h"
 
 class QNetworkReply;
 class QSortFilterProxyModel;
+class QTimer;
+class QLabel;
 class ModelListModel;
 
 // 模型管理页面：从 Hugging Face 拉取最新模型列表、下载 GGUF 文件并设为当前模型。
@@ -27,10 +31,12 @@ signals:
 
 protected:
     void closeEvent(QCloseEvent * event) override;
+    bool eventFilter(QObject * watched, QEvent * event) override;
 
 private slots:
     void onRefresh();
     void onRowDoubleClicked(const QModelIndex & index);
+    void onRowHovered(const QModelIndex & index);
     void onOpenPage();
     void onCopyId();
     void onDownloadGguf();
@@ -47,6 +53,13 @@ private:
     void setBusy(bool busy);
     void updateSelectionActions();
 
+    // —— 悬停显示模型介绍（README 首段） ——
+    QString hoverBaseHtml(const QModelIndex & index) const;
+    void fetchDescription(const QString & id, bool useMirror);
+    void handleDescriptionReply(QNetworkReply * reply, const QString & id, bool wasMirror);
+    void showModelTooltip();
+    QLabel * hoverTip(); // 自绘的不透明提示窗（QToolTip 在 macOS 下有系统级半透明）
+
     Ui::ModelManageDialog ui;
     QNetworkAccessManager m_nam;
     ModelListModel *        m_model = nullptr;
@@ -54,4 +67,12 @@ private:
     QString m_selectedId;
     bool m_downloading = false;
     QFile m_downloadFile;
+
+    QTimer * m_descTimer = nullptr;   // hover 防抖
+    QLabel * m_hoverTip = nullptr;    // 自绘悬停提示窗
+    QString  m_hoverId;
+    QString  m_hoverBase;             // 当前行的元信息 HTML
+    bool     m_listMirror = false;    // 列表是在镜像站拉取成功的
+    QHash<QString, QString> m_descCache;   // 模型介绍缓存（空串 = 无 README）
+    QSet<QString>           m_descRequested;
 };
