@@ -62,6 +62,7 @@ ConfigDialog::ConfigDialog(const AppConfig & config, QWidget * parent) : QDialog
         ui.seedSpin->setValue((int) config.chat.seed);
     }
     ui.thinkCheck->setChecked(config.chat.enable_thinking);
+    ui.autoTrimCheck->setChecked(config.chat.auto_trim);
 
     // —— 连接 ——
     connect(ui.browseMmprojBtn, &QPushButton::clicked, this, &ConfigDialog::browseMmproj);
@@ -145,6 +146,7 @@ AppConfig ConfigDialog::config() const {
     o.min_p           = (float) ui.minPSpin->value();
     o.seed            = ui.seedRandomCheck->isChecked() ? LLAMA_DEFAULT_SEED : (uint32_t) ui.seedSpin->value();
     o.enable_thinking = ui.thinkCheck->isChecked();
+    o.auto_trim       = ui.autoTrimCheck->isChecked();
     o.mmprojPath      = ui.mmprojEdit->text().trimmed().toStdString();
     return c;
 }

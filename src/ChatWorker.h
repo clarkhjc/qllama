@@ -24,6 +24,8 @@ public slots:
     void loadModel(const QString & path, const ChatOptions & opts);
     void unloadModel();
     void generate(const QVector<ChatMessage> & history, const ChatOptions & opts);
+    // 把较早的对话压缩成摘要（在模型上跑一次静默生成）
+    void compressContext(const QVector<ChatMessage> & history, const ChatOptions & opts);
 
     // 注意：生成是阻塞调用，工作线程的事件循环不会处理队列信号，
     // 因此本槽必须以 Qt::DirectConnection 调用（仅置位原子标志，线程安全）。
@@ -37,6 +39,8 @@ signals:
     void contextUpdated(int used, int capacity); // KV 用量 / n_ctx 容量
     void generationFinished(const QString & text, const ChatResult & result);
     void generationFailed(const QString & err);
+    void compressionFinished(const QString & summary);
+    void compressionFailed(const QString & err);
 
 private:
     LlamaChat m_chat;

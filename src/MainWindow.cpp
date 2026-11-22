@@ -36,6 +36,8 @@
 #include <QTime>
 #include <QTimer>
 
+#include <algorithm>
+
 // 把本地图片转成 data URI，嵌入聊天记录的 HTML 中
 static QString imageDataUri(const QString & path, int maxWidth = 320) {
     QImage img(path);
@@ -137,6 +139,19 @@ static QString assistantBubbleHtml(const QString & innerHtml) {
         .arg(Theme::css(t.assistantBubble), Theme::css(t.assistantBubbleBorder), innerHtml);
 }
 
+// 历史摘要卡片（压缩上下文后显示在聊天记录顶部）
+static QString summaryHtml(const QString & summary) {
+    const ThemePalette & t = Theme::palette();
+    return QStringLiteral(
+               "<div style=\"margin:14px 0 6px 0;\">"
+               "<span style=\"color:%1;font-weight:600;font-size:13px;\">%2</span></div>"
+               "<table width=\"100%%\" cellspacing=\"0\" cellpadding=\"0\"><tr><td "
+               "style=\"background-color:%3;border-left:3px solid %4;padding:8px 14px;"
+               "color:%5;font-size:13px;\">%6</td></tr></table>")
+        .arg(Theme::css(t.heading), I18n::t("历史摘要"), Theme::css(t.quoteBg),
+             Theme::css(t.quoteBorder), Theme::css(t.quoteText), Markdown::toHtml(summary));
+}
+
 // 模型状态指示灯：状态样式在 QSS（QLabel#statusDot[state=...]）
 // state: idle / loading / ok / error
 static void setStatusDot(QLabel * dot, const char * state) {
@@ -161,6 +176,9 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     setWindowIcon(QIcon(":/assets/icons/appicon.png"));
     m_config.theme = Theme::currentName(); // 启动主题由 main() 应用，这里同步到配置
     m_config.language = I18n::current();   // 启动语言同样由 main() 应用
+    if (qEnvironmentVariableIsSet("QLLAMA_TEST_CTX")) {
+        m_config.chat.n_ctx = (uint32_t) qEnvironmentVariableIntValue("QLLAMA_TEST_CTX");
+    }
 
     // 滚动区域透明，露出窗口背景
     ui.chatView->viewport()->setAutoFillBackground(false);
@@ -186,6 +204,7 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     connect(this, &MainWindow::loadRequested,     m_worker, &ChatWorker::loadModel);
     connect(this, &MainWindow::unloadRequested,   m_worker, &ChatWorker::unloadModel);
     connect(this, &MainWindow::generateRequested, m_worker, &ChatWorker::generate);
+    connect(this, &MainWindow::compressRequested, m_worker, &ChatWorker::compressContext);
     connect(this, &MainWindow::stopRequested,     m_worker, &ChatWorker::stopGeneration,
             Qt::DirectConnection); // 必须直连：生成阻塞期间队列信号无法被处理
 
@@ -196,6 +215,8 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     connect(m_worker, &ChatWorker::contextUpdated,     this, &MainWindow::updateContextLabel);
     connect(m_worker, &ChatWorker::generationFinished, this, &MainWindow::onGenerationFinished);
     connect(m_worker, &ChatWorker::generationFailed,   this, &MainWindow::onGenerationFailed);
+    connect(m_worker, &ChatWorker::compressionFinished, this, &MainWindow::onCompressionFinished);
+    connect(m_worker, &ChatWorker::compressionFailed,  this, &MainWindow::onCompressionFailed);
 
     // —— 控件连接 ——
     connect(ui.browseModelBtn, &QPushButton::clicked, this, &MainWindow::browseModel);
@@ -211,7 +232,7 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     // 发送按钮随输入内容动态启用
     connect(ui.input, &QTextEdit::textChanged, this, [this] {
         ui.sendBtn->setEnabled(!ui.input->toPlainText().trimmed().isEmpty()
-                               && m_modelLoaded && !m_generating);
+                               && m_modelLoaded && !m_generating && !m_compressing);
     });
     ui.modelPath->setClearButtonEnabled(true);
     // 模型路径占满模型行所有剩余空间
@@ -227,6 +248,14 @@ MainWindow::MainWindow(bool selfTest, const QString & selfTestPrompt, const QStr
     m_contextLabel->setObjectName("contextLabel");
     statusBar()->addPermanentWidget(m_contextLabel);
     updateContextLabel(0, 0);
+
+    // 手动压缩上下文（把较早对话总结成摘要，继续长对话）
+    m_compressBtn = new QPushButton(I18n::t("压缩上下文"));
+    m_compressBtn->setObjectName("compressBtn");
+    m_compressBtn->setToolTip(I18n::t("将较早的对话压缩成摘要，继续长对话"));
+    m_compressBtn->setEnabled(false);
+    connect(m_compressBtn, &QPushButton::clicked, this, &MainWindow::onCompressContext);
+    statusBar()->addPermanentWidget(m_compressBtn);
 
     // —— 系统监控：CPU / 内存 / GPU（2 秒刷新，状态栏右侧常驻） ——
     m_monitorLabel = new QLabel;
@@ -463,8 +492,13 @@ void MainWindow::onSend() {
 
     // 组装完整历史：系统提示词 + 对话历史 + 本轮提问
     QVector<ChatMessage> msgs;
-    if (!m_config.systemPrompt.isEmpty()) {
-        msgs.append(ChatMessage{"system", m_config.systemPrompt.toStdString()});
+    QString systemPrompt = m_config.systemPrompt;
+    if (!m_contextSummary.isEmpty()) {
+        const QString block = I18n::t("[此前对话摘要]\n%1").arg(m_contextSummary);
+        systemPrompt = systemPrompt.isEmpty() ? block : systemPrompt + "\n\n" + block;
+    }
+    if (!systemPrompt.isEmpty()) {
+        msgs.append(ChatMessage{"system", systemPrompt.toStdString()});
     }
     for (const ChatMessage & m : m_history) {
         msgs.append(m);
@@ -495,9 +529,12 @@ void MainWindow::onStop() {
 
 void MainWindow::onClearChat() {
     m_history.clear();
+    m_contextSummary.clear();
+    m_pendingCompressCount = 0;
     ui.chatView->clear();
     ui.chatView->append(welcomeHtml());
     updateContextLabel(0, m_ctxCapacity); // 对话已清空，下次生成会全量重算
+    updateCompressButton();
 }
 
 void MainWindow::onAddImages() {
@@ -559,6 +596,7 @@ void MainWindow::onModelLoaded(const QString & info, bool hasVision) {
                           .arg(m_config.chat.n_ctx)
                           .arg(m_config.chat.temperature, 0, 'f', 2);
     statusBar()->showMessage(summary);
+    updateCompressButton();
     if (m_selfTest) {
         qInfo().noquote() << "SELFTEST 模型已加载:" << info << "多模态:" << hasVision;
         QTimer::singleShot(500, this, [this] {
@@ -592,6 +630,7 @@ void MainWindow::onModelUnloaded() {
     ui.sendBtn->setEnabled(false);
     setStatusDot(ui.statusDot, "idle"); // 未加载
     statusBar()->showMessage(I18n::t("未加载模型"));
+    updateCompressButton();
 }
 
 void MainWindow::onTokenReady(const QString & piece) {
@@ -641,6 +680,22 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
                               .arg(result.generated_tokens)
                               .arg(result.tokens_per_sec, 0, 'f', 1);
     statusBar()->showMessage(stats);
+    // 上下文裁剪 / 截断提示
+    if (result.omitted_messages > 0) {
+        ui.chatView->append(QStringLiteral(
+            "<div style=\"color:%1;font-size:11px;margin:-6px 0 14px 0;\">%2</div>")
+            .arg(Theme::css(Theme::palette().monitorWarn),
+                 I18n::t("已省略较早的 %1 条消息以适配上下文（界面仍保留显示）")
+                     .arg(result.omitted_messages)));
+        statusBar()->showMessage(
+            I18n::t("上下文已满：本次发送省略了 %1 条较早消息").arg(result.omitted_messages), 8000);
+    }
+    if (result.context_limit_reached) {
+        ui.chatView->append(QStringLiteral(
+            "<div style=\"color:%1;font-size:11px;margin:-6px 0 14px 0;\">%2</div>")
+            .arg(Theme::css(Theme::palette().monitorWarn),
+                 I18n::t("已达上下文上限，回复被截断")));
+    }
     ui.input->setFocus();
     scrollChatToBottom(); // Markdown 替换 + 统计行追加后滚动到底
 
@@ -672,13 +727,12 @@ void MainWindow::onGenerationFinished(const QString & text, const ChatResult & r
             // 第二轮验证长对话 KV 增量复用
             QTimer::singleShot(500, this, [this] { selfTestAsk("你刚才说了什么？"); });
         } else {
-            QTimer::singleShot(500, this, [this] {
-                const QString shotDir = QDir::temp().absoluteFilePath("qllama_selftest_chat.png");
-                const QString winDir  = QDir::temp().absoluteFilePath("qllama_selftest_win.png");
-                ui.chatView->grab().save(shotDir);
-                grab().save(winDir);
-                selfTestFinish(true, QString("截图已保存: %1 / %2").arg(shotDir, winDir));
-            });
+            if (qEnvironmentVariableIsSet("QLLAMA_TEST_COMPRESS")) {
+                m_selfTestCompressPending = true;
+                QTimer::singleShot(300, this, &MainWindow::onCompressContext);
+            } else {
+                QTimer::singleShot(500, this, &MainWindow::selfTestCaptureAndFinish);
+            }
         }
     }
 }
@@ -708,6 +762,18 @@ void MainWindow::setGenerating(bool on) {
     ui.addImageBtn->setEnabled(!on);
     // 生成期间锁定模型路径，避免状态不一致
     ui.modelPath->setEnabled(!on);
+    updateCompressButton();
+}
+
+// 自测结束：截图后走正常退出流程
+void MainWindow::selfTestCaptureAndFinish() {
+    QTimer::singleShot(300, this, [this] {
+        const QString shotDir = QDir::temp().absoluteFilePath("qllama_selftest_chat.png");
+        const QString winDir  = QDir::temp().absoluteFilePath("qllama_selftest_win.png");
+        ui.chatView->grab().save(shotDir);
+        grab().save(winDir);
+        selfTestFinish(true, QString("截图已保存: %1 / %2").arg(shotDir, winDir));
+    });
 }
 
 // —— 自测模式 ——
@@ -835,11 +901,108 @@ void MainWindow::updateContextLabel(int used, int capacity) {
             .arg(pct, 0, 'f', 0));
 }
 
+// —— 上下文摘要压缩 ——
+
+// 选择最早的一部分消息交给工作线程总结，至少保留最近一轮完整对话
+void MainWindow::onCompressContext() {
+    if (!m_modelLoaded || m_compressing || m_history.size() < 3) {
+        return;
+    }
+    const int keep = 2; // 保留最近的 user + assistant
+    const int maxTake = m_history.size() - keep;
+    if (maxTake <= 0) {
+        statusBar()->showMessage(I18n::t("没有可压缩的较早消息"), 5000);
+        return;
+    }
+    // 按字符预算选择（约 n_ctx/3，保证摘要请求本身能放进上下文）
+    const int budget = std::max(400, (int) m_config.chat.n_ctx / 3);
+    int take = 0;
+    int chars = m_contextSummary.size();
+    while (take < maxTake) {
+        const int len = (int) m_history[take].content.size() + 12;
+        if (take > 0 && chars + len > budget) {
+            break;
+        }
+        chars += len;
+        take++;
+    }
+    if (take <= 0) {
+        statusBar()->showMessage(I18n::t("没有可压缩的较早消息"), 5000);
+        return;
+    }
+
+    QVector<ChatMessage> batch;
+    if (!m_contextSummary.isEmpty()) {
+        // 已有摘要时一并重新压缩，避免摘要无限叠加
+        batch.append(ChatMessage{"system", m_contextSummary.toStdString()});
+    }
+    for (int i = 0; i < take; i++) {
+        batch.append(m_history[i]);
+    }
+    m_pendingCompressCount = take;
+    setCompressing(true);
+    statusBar()->showMessage(I18n::t("正在压缩上下文……"));
+    emit compressRequested(batch, m_config.chat);
+}
+
+void MainWindow::setCompressing(bool on) {
+    m_compressing = on;
+    ui.sendBtn->setEnabled(!on && m_modelLoaded && !m_generating
+                          && !ui.input->toPlainText().trimmed().isEmpty());
+    ui.configBtn->setEnabled(!on && !m_generating);
+    ui.addImageBtn->setEnabled(!on && !m_generating);
+    ui.loadBtn->setEnabled(!on && !m_generating);
+    ui.unloadBtn->setEnabled(!on && !m_generating && m_modelLoaded);
+    ui.clearBtn->setEnabled(!on && !m_generating);
+    ui.modelPath->setEnabled(!on && !m_generating);
+    updateCompressButton();
+}
+
+void MainWindow::updateCompressButton() {
+    if (!m_compressBtn) {
+        return;
+    }
+    m_compressBtn->setEnabled(m_modelLoaded && !m_generating && !m_compressing
+                              && m_history.size() >= 3);
+}
+
+void MainWindow::onCompressionFinished(const QString & summary) {
+    const int count = m_pendingCompressCount;
+    m_pendingCompressCount = 0;
+    m_contextSummary = summary;
+    qInfo().noquote() << "COMPRESS SUMMARY:" << summary.left(200);
+    if (count > 0 && count <= m_history.size()) {
+        m_history.remove(0, count);
+    }
+    setCompressing(false);
+    rebuildChatView();
+    statusBar()->showMessage(I18n::t("上下文已压缩：%1 条消息已并入摘要").arg(count), 8000);
+    if (m_selfTestCompressPending) {
+        m_selfTestCompressPending = false;
+        selfTestCaptureAndFinish();
+    }
+}
+
+void MainWindow::onCompressionFailed(const QString & err) {
+    m_pendingCompressCount = 0;
+    setCompressing(false);
+    if (m_selfTestCompressPending) {
+        m_selfTestCompressPending = false;
+        selfTestFinish(false, err);
+        return;
+    }
+    QMessageBox::warning(this, I18n::t("上下文压缩失败"), err);
+}
+
 // 切换界面语言：重译静态控件 + 动态文字 + 重建聊天记录
 void MainWindow::applyLanguage(const QString & code) {
     I18n::setLanguage(code);
     m_config.language = I18n::normalized(code);
     I18n::retranslateTree(this);
+    if (m_compressBtn) {
+        m_compressBtn->setText(I18n::t("压缩上下文"));
+        m_compressBtn->setToolTip(I18n::t("将较早的对话压缩成摘要，继续长对话"));
+    }
     updateMonitorLabel();
     updateContextLabel(m_ctxUsed, m_ctxCapacity);
     if (m_generating) {
@@ -855,8 +1018,13 @@ void MainWindow::applyLanguage(const QString & code) {
 // 按当前主题重建整个聊天记录（切换主题后调用）
 void MainWindow::rebuildChatView() {
     ui.chatView->clear();
+    if (!m_contextSummary.isEmpty()) {
+        ui.chatView->append(summaryHtml(m_contextSummary)); // 保留压缩后的历史摘要
+    }
     if (m_history.isEmpty()) {
-        ui.chatView->append(welcomeHtml());
+        if (m_contextSummary.isEmpty()) {
+            ui.chatView->append(welcomeHtml());
+        }
         return;
     }
     for (const ChatMessage & m : m_history) {

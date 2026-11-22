@@ -11,6 +11,8 @@ the **llama.cpp 0.9.0** C API (`llama.h`) and the common chat-template API
 - **Streaming chat**: real-time token-by-token refresh, Markdown rendering (headings / lists /
   tables / task lists / dark code blocks with language labels / blockquotes / links)
 - **KV reuse for long conversations**: incremental KV reuse — each turn only decodes the new content
+- **Context management**: live usage in the status bar; when the context fills up, older messages
+  are omitted automatically (configurable), or compress early messages into a summary with one click
 - **Multimodal**: after loading an mmproj projector model, image Q&A is supported (up to 4 images)
 - **Model management**: fetch the latest models from Hugging Face, search, download GGUF files and
   set one as the current model in a single click (auto-falls back to the hf-mirror.com mirror when
@@ -158,6 +160,7 @@ in the corresponding classes under `src/`:
 | Batch size | 512 | batch size per `llama_decode` call; larger = faster prompt processing but more memory |
 | Threads | 0 (auto) | CPU thread count |
 | Random seed | random | a fixed seed makes output reproducible |
+| Auto-omit older messages | on | Keep the system prompt and recent messages, dropping the oldest turn; when off, a context-full error is shown |
 | Thinking mode | off | Qwen3 and other thinking-capable models output their reasoning before answering; toggling forces a full context recomputation on the next turn |
 
 3. In the input box, `Enter` sends and `Shift+Enter` inserts a newline; click 「停止」(Stop) while

@@ -32,6 +32,25 @@ QFrame#modelBar {
     padding-right: 8px;
 }
 
+/* 状态栏「压缩上下文」按钮 */
+#compressBtn {
+    border: none;
+    background: transparent;
+    color: #a6a6bc;
+    padding: 1px 8px;
+    font-size: 11px;
+    border-radius: 6px;
+}
+
+#compressBtn:hover {
+    background: rgba(143, 168, 255, 0.18);
+    color: #c0d0ff;
+}
+
+#compressBtn:disabled {
+    color: rgba(166, 166, 188, 0.35);
+}
+
 /* 配置页提示文字 */
 #basicHint {
     color: #7c7c94;

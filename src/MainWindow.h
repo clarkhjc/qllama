@@ -31,6 +31,7 @@ signals:
     void loadRequested(const QString & path, const ChatOptions & opts);
     void unloadRequested();
     void generateRequested(const QVector<ChatMessage> & history, const ChatOptions & opts);
+    void compressRequested(const QVector<ChatMessage> & history, const ChatOptions & opts);
     // 停止生成必须以 DirectConnection 直连（生成循环是阻塞的）
     void stopRequested();
 
@@ -51,6 +52,8 @@ private slots:
     void onTokenReady(const QString & piece);
     void onGenerationFinished(const QString & text, const ChatResult & result);
     void onGenerationFailed(const QString & err);
+    void onCompressionFinished(const QString & summary);
+    void onCompressionFailed(const QString & err);
 
 private:
     void prefillModelPath();
@@ -66,6 +69,10 @@ private:
     void applyLanguage(const QString & code); // 切换界面语言并重译界面
     void updateMonitorLabel();    // 按当前语言刷新状态栏监控文字
     void updateContextLabel(int used, int capacity); // 状态栏上下文使用情况
+    void onCompressContext();     // 把较早对话压缩成摘要
+    void setCompressing(bool on);
+    void updateCompressButton();
+    void selfTestCaptureAndFinish(); // 自测截图并退出
     void selfTestAsk(const QString & prompt);
     void selfTestFinish(bool ok, const QString & reason);
 
@@ -85,8 +92,15 @@ private:
 
     // 上下文使用情况（状态栏）
     QLabel *     m_contextLabel = nullptr;
+    QPushButton * m_compressBtn = nullptr;
     int          m_ctxUsed = 0;
     int          m_ctxCapacity = 0;
+
+    // 上下文摘要压缩
+    QString m_contextSummary;      // 已压缩的历史摘要（注入 system 提示）
+    bool    m_compressing = false;
+    int     m_pendingCompressCount = 0;
+    bool    m_selfTestCompressPending = false;
 
     // 配置（配置页面「精简配置 / 全量配置」编辑）
     AppConfig m_config;

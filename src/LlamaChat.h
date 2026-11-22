@@ -36,6 +36,7 @@ struct ChatOptions {
     float    min_p        = 0.05f;
     uint32_t seed         = LLAMA_DEFAULT_SEED; // LLAMA_DEFAULT_SEED = 随机种子
     bool     enable_thinking = false;          // 是否允许模型的思考模式（Qwen3 等支持）
+    bool     auto_trim      = true;            // 上下文满时自动省略较早消息
 };
 
 // 一次生成的结果统计
@@ -45,6 +46,8 @@ struct ChatResult {
     double  tokens_per_sec   = 0.0;
     int32_t context_tokens   = 0; // 生成结束时的 KV 长度
     int32_t context_capacity = 0; // n_ctx 容量
+    int32_t omitted_messages = 0; // 为适配上下文而省略的历史消息数
+    bool    context_limit_reached = false; // 回复因上下文上限被截断
 };
 
 // llama.cpp 的薄封装：模型加载 + 聊天模板渲染 + 采样生成 + 多模态（图片）。

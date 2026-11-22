@@ -1,5 +1,7 @@
 #include "LlamaChat.h"
 
+#include <climits>
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -205,13 +207,84 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
     // 图片只支持出现在最后一条消息（本轮新发送的消息）中
     const bool lastMsgHasImages = !history.empty() && !history.back().imagePaths.empty();
 
-    // 1. 渲染聊天模板（末尾带助手回复引导词；图片消息的 <__media__> 标记原样保留）
+    const llama_vocab * vocab = llama_model_get_vocab(m_model);
+
+    // 1. 渲染聊天模板；上下文超限时按“轮”裁剪最旧消息（自动滑动窗口）。
+    //    始终保留 system 提示词与最后一条消息；裁剪后 KV 前缀失配，会自动全量重算。
+    std::vector<ChatMessage> effective = history;
     std::string prompt;
-    if (!renderPrompt(history, opts, prompt, err)) {
+    int32_t omitted = 0;
+    auto countPromptTokens = [&](const std::string & p) -> int32_t {
+        std::vector<llama_token> tmp(p.size() + 16);
+        int32_t n = llama_tokenize(vocab, p.c_str(), (int32_t) p.size(), tmp.data(),
+                                   (int32_t) tmp.size(), false, true);
+        if (n < 0) {
+            tmp.resize((size_t) -n);
+            n = llama_tokenize(vocab, p.c_str(), (int32_t) p.size(), tmp.data(),
+                               (int32_t) tmp.size(), false, true);
+        }
+        if (n < 0) {
+            return INT32_MAX / 2;
+        }
+        int32_t total = n + (llama_vocab_get_add_bos(vocab) ? 1 : 0);
+        // 图片 token 数取决于投影模型，按保守值预留，避免估算不足导致解码失败
+        const std::string marker = mtmd_default_marker();
+        size_t markers = 0;
+        for (size_t pos = 0; (pos = p.find(marker, pos)) != std::string::npos; pos += marker.size()) {
+            markers++;
+        }
+        total += (int32_t) markers * 1280;
+        return total;
+    };
+    if (!renderPrompt(effective, opts, prompt, err)) {
         return false;
     }
-
-    const llama_vocab * vocab = llama_model_get_vocab(m_model);
+    if (m_nCtx > 0) {
+        const int32_t cap = (int32_t) m_nCtx;
+        const int32_t reserve = std::min<int32_t>(
+            opts.n_predict > 0 ? opts.n_predict : 512,
+            std::max<int32_t>(512, cap / 8));
+        const int32_t budget = cap - reserve;
+        int32_t estimate = countPromptTokens(prompt);
+        if (estimate > budget && opts.auto_trim) {
+            while (estimate > budget) {
+                const size_t start = (!effective.empty() && effective.front().role == "system") ? 1 : 0;
+                if (effective.size() <= start + 1) {
+                    break; // 只剩系统提示词 + 最后一条消息
+                }
+                // 按完整的一轮裁剪：user 及其后的 assistant
+                size_t removeCount = 1;
+                if (start + 1 < effective.size() - 1 && effective[start + 1].role == "assistant") {
+                    removeCount = 2;
+                }
+                if (start + removeCount >= effective.size()) {
+                    break;
+                }
+                effective.erase(effective.begin() + (long) start,
+                                effective.begin() + (long) (start + removeCount));
+                omitted += (int32_t) removeCount;
+                if (!renderPrompt(effective, opts, prompt, err)) {
+                    return false;
+                }
+                estimate = countPromptTokens(prompt);
+            }
+        }
+        if (!opts.auto_trim && estimate > budget) {
+            err = "上下文已满：提示词约 " + std::to_string(estimate) + " token，可用约 "
+                  + std::to_string(budget) + " token。请清空对话、调大「上下文」，"
+                  "或在配置中开启「上下文满时自动省略较早消息」。";
+            return false;
+        }
+        if (estimate > cap - 16) {
+            err = "上下文不足：提示词约 " + std::to_string(estimate) + " token，容量 "
+                  + std::to_string(cap) + " token。请清空对话或调大「上下文」。";
+            return false;
+        }
+    }
+    result.omitted_messages = omitted;
+    if (omitted > 0) {
+        fprintf(stderr, "[上下文裁剪] 省略 %d 条较早消息以适配上下文\n", omitted);
+    }
 
     // 2. 长对话增量复用（文本级前缀比对，与 llama.cpp common 的做法一致）：
     //    新提示词 = 旧提示词 + 上一轮回复 + 本轮追加的模板片段（文本层面必然前缀匹配），
@@ -253,7 +326,7 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
         if (reuse) {
             mediaPaths = history.back().imagePaths;
         } else {
-            for (const auto & m : history) {
+            for (const auto & m : effective) {
                 mediaPaths.insert(mediaPaths.end(), m.imagePaths.begin(), m.imagePaths.end());
             }
         }
@@ -390,12 +463,13 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
         }
 
         // 4. 解码提示词：复用则从 KV 末尾续解码，否则清空 KV 从头解码
-        const int32_t startPos = (int32_t) m_kvSize;
         if (!reuse) {
             llama_memory_clear(llama_get_memory(m_ctx), true);
             m_kvSize = 0;
             m_decodedText.clear();
         }
+        // 必须在清空 KV 之后读取起始位置（裁剪/清空对话会触发全量重算）
+        const int32_t startPos = (int32_t) m_kvSize;
 
         const int32_t nPrompt = (int32_t) tokens.size();
         for (int32_t pos = 0; pos < nPrompt; pos += (int32_t) m_nBatch) {
@@ -443,9 +517,14 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
     const auto t0 = std::chrono::steady_clock::now();
     int32_t nGen = 0;
     std::string replyRaw;
+    bool limitReached = false;
     while (nGen < opts.n_predict) {
         if (stopFlag.load(std::memory_order_relaxed)) {
             break; // 用户点击了“停止”
+        }
+        if (m_nCtx > 0 && m_kvSize + 1 >= m_nCtx) {
+            limitReached = true; // 上下文已满，停止生成（避免 llama_decode 报错）
+            break;
         }
 
         const llama_token tok = llama_sampler_sample(smpl, m_ctx, -1);
@@ -499,7 +578,7 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
     std::string stateRender;
     std::string tmpErr;
     {
-        std::vector<ChatMessage> stateHistory = history;
+        std::vector<ChatMessage> stateHistory = effective;
         stateHistory.push_back(ChatMessage{"assistant", replyRaw});
         stateHistory.push_back(ChatMessage{"user", ""}); // 空 user 占位
         if (renderPrompt(stateHistory, opts, stateRender, tmpErr, /* skipEmpty */ false, /* withGenPrompt */ false)) {
@@ -523,6 +602,7 @@ bool LlamaChat::chat(const std::vector<ChatMessage> & history,
     result.tokens_per_sec   = secs > 0.0 ? (double) nGen / secs : 0.0;
     result.context_tokens   = (int32_t) m_kvSize;
     result.context_capacity = (int32_t) m_nCtx;
+    result.context_limit_reached = limitReached;
     if (onContext) {
         onContext(m_kvSize, m_nCtx);
     }
