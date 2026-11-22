@@ -73,6 +73,8 @@ add_executable(qllama MACOSX_BUNDLE
     src/Markdown.h
     src/ModelManageDialog.cpp
     src/ModelManageDialog.h
+    src/ModelListModel.cpp
+    src/ModelListModel.h
     src/SysMonitor.cpp
     src/SysMonitor.h
     src/Theme.cpp

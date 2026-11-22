@@ -49,13 +49,13 @@
         <number>5</number>
        </property>
        <property name="maximum">
-        <number>100</number>
+        <number>1000</number>
        </property>
        <property name="value">
         <number>30</number>
        </property>
        <property name="toolTip">
-        <string>拉取的模型条数</string>
+        <string>拉取的模型条数（Hugging Face 单次最多返回 1000 条）</string>
        </property>
       </widget>
      </item>
@@ -94,7 +94,7 @@
     </layout>
    </item>
    <item>
-    <widget class="QTableWidget" name="table">
+    <widget class="QTableView" name="table">
      <property name="editTriggers">
       <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
      </property>
@@ -116,31 +116,6 @@
      <attribute name="horizontalHeaderStretchLastSection">
       <bool>false</bool>
      </attribute>
-     <column>
-      <property name="text">
-       <string>模型 ID</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>类型</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>下载量</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>点赞</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>更新时间</string>
-      </property>
-     </column>
     </widget>
    </item>
    <item>

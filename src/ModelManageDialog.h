@@ -4,14 +4,18 @@
 
 #include <QDialog>
 #include <QFile>
+#include <QModelIndex>
 #include <QNetworkAccessManager>
 
 #include "ui_modelmanagedialog.h"
 
 class QNetworkReply;
+class QSortFilterProxyModel;
+class ModelListModel;
 
 // 模型管理页面：从 Hugging Face 拉取最新模型列表、下载 GGUF 文件并设为当前模型。
 // huggingface.co 直连失败时自动回退到 hf-mirror.com 镜像。
+// 列表采用 model/view：ModelListModel（数据）+ QSortFilterProxyModel（排序）+ QTableView。
 class ModelManageDialog : public QDialog {
     Q_OBJECT
 public:
@@ -26,7 +30,7 @@ protected:
 
 private slots:
     void onRefresh();
-    void onRowDoubleClicked(int row, int column);
+    void onRowDoubleClicked(const QModelIndex & index);
     void onOpenPage();
     void onCopyId();
     void onDownloadGguf();
@@ -41,9 +45,12 @@ private:
     void startDownload(const QString & modelId, const QString & filePath,
                        bool useMirror = false, bool forceOverwrite = false);
     void setBusy(bool busy);
+    void updateSelectionActions();
 
     Ui::ModelManageDialog ui;
     QNetworkAccessManager m_nam;
+    ModelListModel *        m_model = nullptr;
+    QSortFilterProxyModel * m_proxy = nullptr;
     QString m_selectedId;
     bool m_downloading = false;
     QFile m_downloadFile;

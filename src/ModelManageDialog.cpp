@@ -1,38 +1,53 @@
 #include "ModelManageDialog.h"
+#include "ModelListModel.h"
+#include "Theme.h"
 
 #include <QApplication>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QCursor>
 #include <QDesktopServices>
 #include <QDir>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QItemSelectionModel>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLabel>
 #include <QMessageBox>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPushButton>
-#include <QTableWidgetItem>
+#include <QRegularExpression>
+#include <QSortFilterProxyModel>
+#include <QTableView>
 #include <QTimer>
 #include <QUrlQuery>
 #include <QDebug>
 
 #include <algorithm>
 
-// 下载量/点赞量友好格式：1.2M / 345K / 890
-static QString formatCount(long n) {
-    if (n >= 1000000) {
-        return QStringLiteral("%1M").arg(n / 1000000.0, 0, 'f', 1);
+namespace {
+
+// 排序代理：数字列（下载量/点赞）按原始值排序，其余列按显示文本排序
+class ModelSortProxy : public QSortFilterProxyModel {
+public:
+    using QSortFilterProxyModel::QSortFilterProxyModel;
+
+protected:
+    bool lessThan(const QModelIndex & left, const QModelIndex & right) const override {
+        const int col = left.column();
+        if (col == ModelListModel::DownloadsColumn || col == ModelListModel::LikesColumn) {
+            return left.data(ModelListModel::RawValueRole).toLongLong()
+                 < right.data(ModelListModel::RawValueRole).toLongLong();
+        }
+        return QSortFilterProxyModel::lessThan(left, right);
     }
-    if (n >= 1000) {
-        return QStringLiteral("%1K").arg(n / 1000.0, 0, 'f', 1);
-    }
-    return QString::number(n);
-}
+};
 
 // 文件大小友好格式
 static QString formatBytes(qint64 n) {
@@ -48,46 +63,41 @@ static QString formatBytes(qint64 n) {
     return QStringLiteral("%1 B").arg(n);
 }
 
-// 数字列：存真实数值用于正确排序，显示格式化文本
-static QTableWidgetItem * numericItem(long value) {
-    auto * item = new QTableWidgetItem;
-    item->setData(Qt::DisplayRole, (qlonglong) value);
-    item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    return item;
-}
+} // namespace
 
 ModelManageDialog::ModelManageDialog(const AppConfig & config, QWidget * parent) : QDialog(parent) {
     ui.setupUi(this); // 界面布局见 ui/modelmanagedialog.ui（Qt Designer 编辑）
 
-    // 表格列宽策略
-    ui.table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int i = 1; i < ui.table->columnCount(); i++) {
+    // 列表：model/view（数据模型 + 排序代理 + QTableView）
+    m_model = new ModelListModel(this);
+    m_proxy = new ModelSortProxy(this);
+    m_proxy->setSourceModel(m_model);
+    ui.table->setModel(m_proxy);
+    ui.table->setSortingEnabled(true);
+    ui.table->sortByColumn(ModelListModel::UpdatedColumn, Qt::DescendingOrder); // 默认按最近更新
+    ui.table->verticalHeader()->setVisible(false);
+    ui.table->horizontalHeader()->setSectionResizeMode(ModelListModel::IdColumn, QHeaderView::Stretch);
+    for (int i = 1; i < ModelListModel::ColumnCount; i++) {
         ui.table->horizontalHeader()->setSectionResizeMode(i, QHeaderView::ResizeToContents);
     }
 
     ui.searchEdit->setClearButtonEnabled(true);
-    ui.refreshBtn->setIcon(QIcon(":/assets/icons/play-circle.svg"));
-    ui.downloadBtn->setIcon(QIcon(":/assets/icons/download.svg"));
-    ui.openBtn->setIcon(QIcon(":/assets/icons/message-circle.svg"));
-    ui.closeBtn->setIcon(QIcon(":/assets/icons/x-circle.svg"));
+    ui.refreshBtn->setIcon(Theme::icon("play-circle"));
+    ui.downloadBtn->setIcon(Theme::icon("download"));
+    ui.openBtn->setIcon(Theme::icon("message-circle"));
+    ui.closeBtn->setIcon(Theme::icon("x-circle"));
     ui.progressBar->setVisible(false);
 
     // 默认保存目录：~/Documents/agents/models（可在界面上修改）
     ui.saveDirEdit->setText(QDir::home().filePath("Documents/agents/models"));
     ui.saveDirEdit->setClearButtonEnabled(true);
-    ui.browseSaveDirBtn->setIcon(QIcon(":/assets/icons/folder.svg"));
+    ui.browseSaveDirBtn->setIcon(Theme::icon("folder"));
     connect(ui.browseSaveDirBtn, &QPushButton::clicked, this, &ModelManageDialog::browseSaveDir);
 
     connect(ui.refreshBtn, &QPushButton::clicked, this, &ModelManageDialog::onRefresh);
-    connect(ui.table, &QTableWidget::cellDoubleClicked, this, &ModelManageDialog::onRowDoubleClicked);
-    connect(ui.table, &QTableWidget::itemSelectionChanged, this, [this] {
-        const int row = ui.table->currentRow();
-        m_selectedId = row >= 0 ? ui.table->item(row, 0)->text() : QString();
-        const bool has = !m_selectedId.isEmpty();
-        ui.openBtn->setEnabled(has);
-        ui.copyBtn->setEnabled(has);
-        ui.downloadBtn->setEnabled(has);
-    });
+    connect(ui.table, &QTableView::doubleClicked, this, &ModelManageDialog::onRowDoubleClicked);
+    connect(ui.table->selectionModel(), &QItemSelectionModel::currentRowChanged, this,
+            [this](const QModelIndex &, const QModelIndex &) { updateSelectionActions(); });
     connect(ui.openBtn, &QPushButton::clicked, this, &ModelManageDialog::onOpenPage);
     connect(ui.copyBtn, &QPushButton::clicked, this, &ModelManageDialog::onCopyId);
     connect(ui.downloadBtn, &QPushButton::clicked, this, &ModelManageDialog::onDownloadGguf);
@@ -136,6 +146,18 @@ void ModelManageDialog::setBusy(bool busy) {
     ui.downloadBtn->setEnabled(!busy && !m_selectedId.isEmpty());
     ui.searchEdit->setEnabled(!busy);
     ui.countSpin->setEnabled(!busy);
+}
+
+// 根据当前选中行更新按钮可用状态与 m_selectedId
+void ModelManageDialog::updateSelectionActions() {
+    const QModelIndex current = ui.table->currentIndex();
+    m_selectedId = current.isValid()
+                       ? current.sibling(current.row(), ModelListModel::IdColumn).data().toString()
+                       : QString();
+    const bool has = !m_selectedId.isEmpty();
+    ui.openBtn->setEnabled(has);
+    ui.copyBtn->setEnabled(has);
+    ui.downloadBtn->setEnabled(has && !m_downloading);
 }
 
 void ModelManageDialog::onRefresh() {
@@ -189,24 +211,21 @@ void ModelManageDialog::handleModelsReply(QNetworkReply * reply, bool wasMirror)
     }
 
     const QJsonArray arr = doc.array();
-    ui.table->setRowCount(arr.size());
-    ui.table->setSortingEnabled(false); // 填充时暂停排序，避免行错乱
-    for (int i = 0; i < arr.size(); i++) {
-        const QJsonObject obj = arr[i].toObject();
-        auto * idItem = new QTableWidgetItem(obj["id"].toString());
-        idItem->setToolTip(obj["id"].toString());
-        ui.table->setItem(i, 0, idItem);
-
-        const QString tag = obj["pipeline_tag"].toString();
-        auto * tagItem = new QTableWidgetItem(tag.isEmpty() ? QStringLiteral("—") : tag);
-        tagItem->setTextAlignment(Qt::AlignCenter);
-        ui.table->setItem(i, 1, tagItem);
-
-        ui.table->setItem(i, 2, numericItem((long) obj["downloads"].toDouble()));
-        ui.table->setItem(i, 3, numericItem((long) obj["likes"].toDouble()));
-        ui.table->setItem(i, 4, new QTableWidgetItem(obj["lastModified"].toString().left(10)));
+    QVector<ModelEntry> models;
+    models.reserve(arr.size());
+    for (const QJsonValue & value : arr) {
+        const QJsonObject obj = value.toObject();
+        ModelEntry entry;
+        entry.id           = obj["id"].toString();
+        entry.pipelineTag  = obj["pipeline_tag"].toString();
+        entry.downloads    = (qlonglong) obj["downloads"].toDouble();
+        entry.likes        = (qlonglong) obj["likes"].toDouble();
+        entry.lastModified = obj["lastModified"].toString().left(10);
+        models.append(entry);
     }
-    ui.table->setSortingEnabled(true);
+    m_model->setModels(models);
+    ui.table->setCurrentIndex(QModelIndex()); // 清空选中行（触发按钮状态刷新）
+    updateSelectionActions();
 
     ui.statusLabel->setText(QStringLiteral("已拉取 %1 条模型（按最近更新排序）%2")
                                 .arg(arr.size())
@@ -417,8 +436,8 @@ void ModelManageDialog::startDownload(const QString & modelId, const QString & f
     });
 }
 
-void ModelManageDialog::onRowDoubleClicked(int row, int) {
-    const QString id = ui.table->item(row, 0)->text();
+void ModelManageDialog::onRowDoubleClicked(const QModelIndex & index) {
+    const QString id = index.sibling(index.row(), ModelListModel::IdColumn).data().toString();
     if (!id.isEmpty()) {
         QDesktopServices::openUrl(QUrl("https://huggingface.co/" + id));
     }
@@ -436,3 +455,4 @@ void ModelManageDialog::onCopyId() {
         ui.statusLabel->setText("已复制模型 ID：" + m_selectedId);
     }
 }
+
