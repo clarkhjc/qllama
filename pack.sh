@@ -83,6 +83,7 @@ fi
 
 # ---------- 2. 复制并部署 Qt 依赖 ----------
 echo "== 部署 Qt 依赖（macdeployqt） =="
+mkdir -p dist
 rm -rf "$APP_DIR"
 cp -R build/qllama.app "$APP_DIR"
 "$MACDEPLOYQT" "$APP_DIR" >/dev/null 2>&1 || true  # QtVirtualKeyboard 等无关警告可忽略
