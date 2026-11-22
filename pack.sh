@@ -70,7 +70,12 @@ clean_machine_rpaths() { # $1=二进制  [$2=需要确保存在的 rpath]
 if [ $NO_BUILD -eq 0 ]; then
     echo "== 构建 =="
     if [ ! -f build/CMakeCache.txt ]; then
-        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        CMAKE_ARGS=(-S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release)
+        # 便于 CI/其他机器指定 llama.cpp 位置（默认由 CMakeLists 自动探测）
+        if [ -n "${LLAMA_CPP_DIR:-}" ]; then
+            CMAKE_ARGS+=("-DLLAMA_CPP_DIR=${LLAMA_CPP_DIR}")
+        fi
+        cmake "${CMAKE_ARGS[@]}"
     fi
     cmake --build build
 fi

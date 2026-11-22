@@ -69,6 +69,19 @@ paths, re-signs ad-hoc and produces `dist/qllama-<version>-<arch>.dmg` (drag int
 The bundle is ad-hoc signed; if Gatekeeper blocks the first launch, allow it under
 System Settings → Privacy & Security.
 
+### Automated builds with GitHub Actions
+
+The repository ships `.github/workflows/build-dmg.yml`, which packages the app on a GitHub
+Apple Silicon runner:
+
+- **Push a `v*` tag** (e.g. `git tag v0.1.0 && git push origin v0.1.0`): builds the DMG and attaches
+  it to a release with the same tag;
+- **Run manually**: Actions → `Build DMG` → `Run workflow`; the DMG is available as an artifact.
+
+The workflow pins a llama.cpp commit and passes the built tree to `pack.sh` via `LLAMA_CPP_DIR`.
+CI has no interactive desktop, so it uses `--no-verify` to skip the launch check; dependency
+deployment, path cleanup and signing are unchanged.
+
 ## Usage
 
 1. Pick a GGUF model and click 「加载模型」(Load Model); or download one from Hugging Face via

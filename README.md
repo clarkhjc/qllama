@@ -66,6 +66,16 @@ open build/qllama.app
 `dist/qllama-<版本>-<架构>.dmg`（拖入 Applications 即可）。安装包为 ad-hoc 签名，
 首次启动若被 Gatekeeper 拦截，请在「系统设置 → 隐私与安全性」中允许。
 
+### GitHub Actions 自动构建
+
+仓库自带 `.github/workflows/build-dmg.yml`，在 GitHub 的 Apple Silicon runner 上自动打包：
+
+- **推送 `v*` 标签**（如 `git tag v0.1.0 && git push origin v0.1.0`）：构建 DMG 并附加到同名 Release；
+- **手动触发**：Actions 页面选择 `Build DMG` → `Run workflow`，产物在 Artifacts 中。
+
+workflow 固定了 llama.cpp 的提交，并通过 `LLAMA_CPP_DIR` 把已构建的 llama.cpp 传给
+`pack.sh`；CI 没有交互桌面，故以 `--no-verify` 跳过启动验证，其余依赖部署、路径清理与签名步骤不变。
+
 ## 使用
 
 1. 选择 GGUF 模型并点击「加载模型」；也可在「管理模型」中从 Hugging Face 下载；

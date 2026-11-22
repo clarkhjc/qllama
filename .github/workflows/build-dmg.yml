@@ -1,0 +1,106 @@
+name: Build DMG
+
+# 推送 v* 标签或手动触发；产物上传到 Actions Artifacts，
+# 标签构建同时附加到 GitHub Release。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # 固定与本地开发一致的 llama.cpp 版本，避免上游 API 变动导致编译失败
+  LLAMA_CPP_REPO: https://github.com/clarkhjc/llama.cpp.git
+  LLAMA_CPP_REF: 8bed7cfb999cebc03d2cc5b78911026a8d57549a
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+concurrency:
+  group: build-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dmg:
+    # 需要 Apple Silicon runner（Metal / arm64）。macos-15 / macos-26 标准 runner
+    # 均为 arm64；注意 macos-14 是 x64 且已弃用。
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Apple Silicon runner
+        run: |
+          uname -m
+          test "$(uname -m)" = "arm64"
+
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-${{ runner.arch }}-qt-qtsvg-v1
+          restore-keys: brew-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Qt and build tools
+        run: brew install qt qtsvg ninja
+
+      - name: Cache llama.cpp build
+        id: llama-cache
+        uses: actions/cache@v4
+        with:
+          path: llama.cpp
+          # 修改下面的 llama.cpp 构建选项时，同步更新 v1 后缀
+          key: llama-${{ env.LLAMA_CPP_REF }}-${{ runner.arch }}-v1
+
+      - name: Build llama.cpp
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --filter=blob:none "$LLAMA_CPP_REPO" llama.cpp
+          cd llama.cpp
+          git checkout "$LLAMA_CPP_REF"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_METAL=ON \
+            -DGGML_METAL_EMBED_LIBRARY=ON \
+            -DGGML_NATIVE=OFF \
+            -DLLAMA_BUILD_TOOLS=ON \
+            -DLLAMA_BUILD_SERVER=OFF \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_CURL=OFF \
+            -DLLAMA_OPENSSL=OFF
+          # 只构建 qllama 需要的库，跳过命令行工具，缩短 CI 时间
+          cmake --build build --target llama-common mtmd -j "$(sysctl -n hw.ncpu)"
+
+      - name: Verify llama.cpp libraries
+        run: |
+          ls -l llama.cpp/build/bin/libllama.dylib \
+                llama.cpp/build/bin/libllama-common.dylib \
+                llama.cpp/build/bin/libmtmd.dylib
+
+      - name: Build qllama and package DMG
+        env:
+          LLAMA_CPP_DIR: ${{ github.workspace }}/llama.cpp
+        # CI 无交互桌面，跳过启动验证；构建、依赖部署、签名仍完整执行
+        run: ./pack.sh --no-verify
+
+      - name: Show artifact
+        run: ls -lh dist/*.dmg
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qllama-dmg-${{ github.run_number }}
+          path: dist/*.dmg
+          if-no-files-found: error
+
+      - name: Attach DMG to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.dmg
+          generate_release_notes: true
+          fail_on_unmatched_files: true
